@@ -53,12 +53,12 @@ void PacketStream::reconnect() {
 
 void PacketStream::connect() {
   if (!enabled) {
-    Serial.println("PacketStream: connect(): not enabled");
+    Serial.println("PacketStream: not enabled, connect aborted");
     return;
   }
 
   if (client.connected() || client.connecting()) {
-    Serial.println("PacketStream: connect(): already connected or connecting");
+    Serial.println("PacketStream: already connected or connecting");
     return;
   }
 
@@ -71,7 +71,7 @@ void PacketStream::connect() {
 
   client.onError([&](void *arg, AsyncClient *c, int error) {
     tcp_async_errors++;
-    Serial.print("PacketStream: TCP client error ");
+    Serial.print("PacketStream: error ");
     Serial.print(error, DEC);
     Serial.print(": ");
     Serial.println(c->errorToString(error));
@@ -88,8 +88,6 @@ void PacketStream::connect() {
   //NULL);
 
   client.onConnect([=](void *arg, AsyncClient *c) {
-    Serial.println("PacketStream: TCP client connected");
-    tcp_connects++;
     if (server_secure) {
       if (server_verify) {
         SSL *ssl = c->getSSL();
@@ -103,17 +101,18 @@ void PacketStream::connect() {
           matched = true;
         }
         if (!matched) {
-          Serial.println("PacketStream: TLS fingerprint doesn't match");
+          Serial.println("PacketStream: TLS fingerprint doesn't match, disconnecting");
           tcp_fingerprint_errors++;
           c->close(true);
         }
       } else {
-        Serial.println("PacketStream: TLS fingerprint not verified");
+        Serial.println("PacketStream: TLS fingerprint not verified, continuing");
       }
     }
+    tcp_connects++;
     rx_buffer.flush();
     tx_buffer.flush();
-    Serial.println("PacketStream: TCP connected");
+    Serial.println("PacketStream: connected");
     if (connect_callback) {
       connect_callback();
     }
@@ -121,7 +120,7 @@ void PacketStream::connect() {
   NULL);
 
   client.onDisconnect([=](void *arg, AsyncClient *c) {
-    Serial.println("PacketStream: TCP client disconnected");
+    Serial.println("PacketStream: disconnected");
     rx_buffer.flush();
     tx_buffer.flush();
     if (disconnect_callback) {
@@ -160,9 +159,10 @@ void PacketStream::connect() {
   client.setRxTimeout(300);
   client.setNoDelay(true);
 
+  Serial.println("PacketStream: connecting");
   if (!client.connect(server_host, server_port, server_secure)) {
     tcp_sync_errors++;
-    Serial.println("PacketStream: connect(): connect failed immediately");
+    Serial.println("PacketStream: connect failed");
     client.close(true);
     tcp_active = false;
     scheduleConnect();
@@ -228,7 +228,7 @@ size_t PacketStream::processTxBuffer() {
       return sent;
     } else {
       if (debug_packet) {
-        Serial.println("PacketStream: processTxBuffer() can't send yet");
+        Serial.println("PacketStream: can't send yet");
       }
       tx_delay_count++;
       return 0;
@@ -239,7 +239,7 @@ size_t PacketStream::processTxBuffer() {
 
 size_t PacketStream::processRxBuffer() {
   if (in_rx_handler) {
-    Serial.println("PacketStream::processRxBuffer(): double entry");
+    Serial.println("PacketStream: double entry into processRxBuffer()");
     return 0;
   }
   in_rx_handler = true;
@@ -281,7 +281,6 @@ size_t PacketStream::processRxBuffer() {
 
 void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
-    Serial.println("PacketStream: scheduleConnect(): scheduling connect");
     connect_scheduled_time = millis();
     connect_scheduled = true;
   }
