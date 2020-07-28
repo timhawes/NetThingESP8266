@@ -183,6 +183,7 @@ bool PacketStream::sendPacket(const char* packet, size_t packet_len) {
   if (tx_buffer.room() < 2 + packet_len) {
     Serial.println("PacketStream: send failed, no room in tx queue");
     packet_queue_full++;
+    return false;
   }
 
   int sent = 0;
