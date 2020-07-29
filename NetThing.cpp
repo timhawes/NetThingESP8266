@@ -70,6 +70,20 @@ void NetThing::loop() {
       sendJson(doc);
     }
   }
+
+  if (watchdog_timeout > 0) {
+    if (millis() - last_packet_received > watchdog_timeout) {
+      Serial.println("NetThing: watchdog triggered, restarting");
+      if (restart_callback) {
+        // main application may restart if convenient
+        restart_callback(false, restart_firmware);
+      } else {
+        // no handler available, perform our own restart immediately
+        ESP.restart();
+        delay(5000);
+      }
+    }
+  }
 }
 
 void NetThing::onConnect(NetThingConnectHandler callback) {
@@ -114,6 +128,10 @@ void NetThing::setServer(const char *host, int port,
                               const uint8_t *fingerprint1,
                               const uint8_t *fingerprint2) {
   jsonstream.setServer(host, port, secure, verify, fingerprint1, fingerprint2);
+}
+
+void NetThing::setWatchdog(unsigned int timeout) {
+  watchdog_timeout = timeout;
 }
 
 void NetThing::setWiFi(const char *ssid, const char *password) {
@@ -170,6 +188,7 @@ void NetThing::sendFileInfo(const char *filename)
 }
 
 void NetThing::jsonReceiveHandler(const JsonDocument &doc) {
+  last_packet_received = millis();
   if (doc.containsKey(cmd_key)) {
     const char *cmd = doc[cmd_key];
     if (strcmp(cmd, "file_data") == 0) {

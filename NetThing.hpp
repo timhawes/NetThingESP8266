@@ -30,10 +30,12 @@ class NetThing {
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
+  int watchdog_timeout = 0;
   // state
   bool enabled = false;
   bool connect_scheduled = false;
   time_t connect_scheduled_time = 0;
+  time_t last_packet_received = 0;
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
   // metrics
@@ -76,6 +78,7 @@ class NetThing {
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,
                  const uint8_t *fingerprint2=NULL);
+  void setWatchdog(unsigned int timeout);
   void setWiFi(const char *ssid, const char *password);
   void start();
   void stop();
