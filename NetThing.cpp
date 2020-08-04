@@ -474,6 +474,7 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   reply["net_json_parse_ok"] = jsonstream.json_parse_ok;
   reply["net_json_parse_max_usage"] = jsonstream.json_parse_max_usage;
   reply["net_wifi_reconns"] = wifi_reconnections;
+  reply["net_wifi_rssi"] = WiFi.RSSI();
   reply.shrinkToFit();
   sendJson(reply);
 }
