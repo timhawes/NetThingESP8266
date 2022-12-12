@@ -90,6 +90,7 @@ bool FirmwareWriter::begin(const char *md5, size_t size) {
     strncpy(_md5, md5, sizeof(_md5));
     position = 0;
     started = false;
+    last_activity = millis();
     return true;
   }
 }

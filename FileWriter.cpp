@@ -23,6 +23,7 @@ bool FileWriter::begin(const char *filename, const char *md5, size_t size) {
     Serial.println("FileWriter: begin(): aborting existing task first");
     abort();
   }
+  last_activity = millis();
   active = true;
   strncpy(_filename, filename, sizeof(_filename));
   strncpy(_md5, md5, sizeof(_md5));
