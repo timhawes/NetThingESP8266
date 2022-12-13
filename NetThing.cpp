@@ -263,6 +263,7 @@ void NetThing::cmdFileData(const JsonDocument &obj)
         reply[cmd_key] = "file_write_error";
         reply["filename"] = obj["filename"];
         reply["error"] = "file_writer->commit() failed";
+        file_writer->abort();
         sendJson(reply);
       }
     } else {
@@ -277,6 +278,7 @@ void NetThing::cmdFileData(const JsonDocument &obj)
     reply[cmd_key] = "file_write_error";
     reply["filename"] = obj["filename"];
     reply["error"] = "file_writer->add() failed";
+    file_writer->abort();
     sendJson(reply);
   }
 }
@@ -394,6 +396,7 @@ void NetThing::cmdFirmwareData(const JsonDocument &obj)
         reply[cmd_key] = "firmware_write_error";
         reply["error"] = "firmware_writer->commit() failed";
         reply["updater_error"] = firmware_writer->getUpdaterError();
+        firmware_writer->abort();
         sendJson(reply);
         if (transfer_status_callback) {
           transfer_status_callback("firmware", 0, false, false);
@@ -413,6 +416,7 @@ void NetThing::cmdFirmwareData(const JsonDocument &obj)
     reply[cmd_key] = "firmware_write_error";
     reply["error"] = "firmware_writer->add() failed";
     reply["updater_error"] = firmware_writer->getUpdaterError();
+    firmware_writer->abort();
     sendJson(reply);
     if (transfer_status_callback) {
       transfer_status_callback("firmware", 0, false, false);
