@@ -30,12 +30,12 @@ class NetThing {
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
-  int watchdog_timeout = 0;
+  unsigned int watchdog_timeout = 0;
   // state
   bool enabled = false;
   bool connect_scheduled = false;
-  time_t connect_scheduled_time = 0;
-  time_t last_packet_received = 0;
+  unsigned long connect_scheduled_time = 0;
+  unsigned long last_packet_received = 0;
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
   // metrics

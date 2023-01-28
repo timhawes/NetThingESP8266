@@ -26,13 +26,13 @@ class PacketStream {
   bool server_verify;
   const uint8_t *server_fingerprint1;
   const uint8_t *server_fingerprint2;
-  int reconnect_interval = 1000;
+  unsigned int reconnect_interval = 1000;
   bool fast_receive = false;
   bool fast_send = false;
   // state
   bool enabled = false;
   bool connect_scheduled = false;
-  time_t connect_scheduled_time = 0;
+  unsigned long connect_scheduled_time = 0;
   bool in_rx_handler = false;
   bool tcp_active = false;
   // private methods
