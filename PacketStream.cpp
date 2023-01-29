@@ -174,7 +174,7 @@ bool PacketStream::sendPacket(const char* packet, size_t packet_len) {
 
   if (debug_packet) {
     Serial.print("PacketStream: send ");
-    for (int i=0; i<packet_len; i++) {
+    for (unsigned int i=0; i<packet_len; i++) {
       printf("%02x", packet[i]);
     }
     Serial.println();
@@ -186,13 +186,13 @@ bool PacketStream::sendPacket(const char* packet, size_t packet_len) {
     return false;
   }
 
-  int sent = 0;
+  unsigned int sent = 0;
 
   header[0] = (packet_len & 0xFF00) >> 8;
   header[1] = packet_len & 0xFF;
   sent += tx_buffer.write(header[0]);
   sent += tx_buffer.write(header[1]);
-  for (int i = 0; i < packet_len; i++) {
+  for (unsigned int i = 0; i < packet_len; i++) {
     sent += tx_buffer.write(packet[i]);
   }
 
@@ -245,7 +245,7 @@ size_t PacketStream::processRxBuffer() {
   }
   in_rx_handler = true;
 
-  int processed_bytes = 0;
+  unsigned int processed_bytes = 0;
 
   while (rx_buffer.available() >= 2) {
     // while (receive_buffer->getSize() >= 2) {

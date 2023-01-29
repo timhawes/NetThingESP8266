@@ -43,14 +43,14 @@ class PacketStream {
  public:
   PacketStream(int rx_buffer_len, int tx_buffer_len);
   // metrics
-  int tcp_connects = 0;
-  int tcp_double_connect_errors = 0;
-  int tcp_async_errors = 0;
-  int tcp_sync_errors = 0;
-  int tcp_fingerprint_errors = 0;
-  int rx_buffer_high_watermark = 0;
-  int tx_buffer_high_watermark = 0;
-  int tx_delay_count = 0;
+  unsigned int tcp_connects = 0;
+  unsigned int tcp_double_connect_errors = 0;
+  unsigned int tcp_async_errors = 0;
+  unsigned int tcp_sync_errors = 0;
+  unsigned int tcp_fingerprint_errors = 0;
+  unsigned int rx_buffer_high_watermark = 0;
+  unsigned int tx_buffer_high_watermark = 0;
+  unsigned int tx_delay_count = 0;
   unsigned long packet_queue_error = 0;
   unsigned long packet_queue_full = 0;
   unsigned long packet_queue_ok = 0;
