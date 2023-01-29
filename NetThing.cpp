@@ -239,7 +239,7 @@ void NetThing::jsonReceiveHandler(const JsonDocument &doc) {
 
 void NetThing::cmdFileData(const JsonDocument &obj)
 {
-  const char *b64 = obj["data"].as<char*>();
+  const char *b64 = obj["data"].as<const char*>();
   unsigned int binary_length = decode_base64_length((unsigned char*)b64);
   uint8_t *binary = new uint8_t[binary_length];
   binary_length = decode_base64((unsigned char*)b64, binary);
@@ -372,7 +372,7 @@ void NetThing::cmdFileWrite(const JsonDocument &obj)
 
 void NetThing::cmdFirmwareData(const JsonDocument &obj)
 {
-  const char *b64 = obj["data"].as<char*>();
+  const char *b64 = obj["data"].as<const char*>();
   unsigned int binary_length = decode_base64_length((unsigned char*)b64);
   uint8_t *binary = new uint8_t[binary_length];
   binary_length = decode_base64((unsigned char*)b64, binary);
