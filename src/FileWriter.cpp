@@ -2,6 +2,7 @@
 
 FileWriter::FileWriter() {
   strncpy(_filename, "", sizeof(_filename));
+  strncpy(_tmp_filename, "", sizeof(_tmp_filename));
   strncpy(_md5, "", sizeof(_md5));
   _size = 0;
 }
@@ -10,8 +11,9 @@ void FileWriter::abort() {
   if (file_handle) {
     file_handle.close();
   }
-  SPIFFS.remove(tmp_filename);
+  SPIFFS.remove(_tmp_filename);
   strncpy(_filename, "", sizeof(_filename));
+  strncpy(_tmp_filename, "", sizeof(_tmp_filename));
   strncpy(_md5, "", sizeof(_md5));
   _size = 0;
   file_open = false;
@@ -26,6 +28,8 @@ bool FileWriter::begin(const char *filename, const char *md5, size_t size) {
   last_activity = millis();
   active = true;
   strncpy(_filename, filename, sizeof(_filename));
+  strncpy(_tmp_filename, filename, sizeof(_tmp_filename));
+  strncat(_tmp_filename, "~", sizeof(_tmp_filename));
   strncpy(_md5, md5, sizeof(_md5));
   _size = size;
   return true;
@@ -61,7 +65,7 @@ bool FileWriter::commit() {
     file_open = false;
 
     MD5Builder tmp_md5;
-    File tmp_file = SPIFFS.open(tmp_filename, "r");
+    File tmp_file = SPIFFS.open(_tmp_filename, "r");
     size_t tmp_file_size = tmp_file.size();
     tmp_md5.begin();
     while (tmp_file.available()) {
@@ -87,7 +91,7 @@ bool FileWriter::commit() {
         strcmp(tmp_md5.toString().c_str(), _md5) == 0) {
       Serial.println(" match");
       SPIFFS.remove(_filename);
-      SPIFFS.rename(tmp_filename, _filename);
+      SPIFFS.rename(_tmp_filename, _filename);
       active = false;
       return true;
     } else {
@@ -101,7 +105,7 @@ bool FileWriter::commit() {
 }
 
 bool FileWriter::open() {
-  file_handle = SPIFFS.open(tmp_filename, "w");
+  file_handle = SPIFFS.open(_tmp_filename, "w");
   if (file_handle) {
     received_size = 0;
     file_open = true;
