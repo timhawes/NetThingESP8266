@@ -56,7 +56,7 @@ bool JsonStream::sendJson(const JsonDocument &doc, bool now) {
     Serial.printf("JsonStream: send usage=%d/%d len=%d json=", doc.memoryUsage(), doc.capacity(), packet_len);
     Serial.println(packet);
   }
-  
+
   bool result = sendPacket((uint8_t*)packet, packet_len);
   delete[] packet;
   return result;

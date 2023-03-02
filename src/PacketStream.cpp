@@ -166,7 +166,7 @@ void PacketStream::connect() {
     client.close(true);
     tcp_active = false;
     scheduleConnect();
-  }  
+  }
 }
 
 bool PacketStream::sendPacket(const uint8_t* packet, size_t packet_len) {
