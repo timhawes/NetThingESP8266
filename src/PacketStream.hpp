@@ -8,7 +8,7 @@
 
 typedef std::function<void()> PacketStreamConnectHandler;
 typedef std::function<void()> PacketStreamDisconnectHandler;
-typedef std::function<void(const char *data, int len)> PacketStreamReceivePacketHandler;
+typedef std::function<void(const uint8_t *data, int len)> PacketStreamReceivePacketHandler;
 
 class PacketStream {
  private:
@@ -65,7 +65,7 @@ class PacketStream {
   void start();
   void stop();
   void reconnect();
-  bool sendPacket(const char* data, size_t size);
+  bool sendPacket(const uint8_t* data, size_t size);
   void loop();
 };
 

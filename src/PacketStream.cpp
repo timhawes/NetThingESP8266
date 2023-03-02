@@ -169,7 +169,7 @@ void PacketStream::connect() {
   }  
 }
 
-bool PacketStream::sendPacket(const char* packet, size_t packet_len) {
+bool PacketStream::sendPacket(const uint8_t* packet, size_t packet_len) {
   char header[3];
 
   if (debug_packet) {
@@ -267,7 +267,7 @@ size_t PacketStream::processRxBuffer() {
         Serial.println();
       }
       if (receivepacket_callback) {
-        receivepacket_callback((const char*)packet, length);
+        receivepacket_callback(packet, length);
       }
       delete[] packet;
     } else {

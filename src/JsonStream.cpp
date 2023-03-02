@@ -6,7 +6,7 @@ JsonStream::JsonStream(int rx_buffer_len, int tx_buffer_len) : PacketStream(rx_b
   onReceivePacket(std::bind(&JsonStream::receivePacket, this, _1, _2));
 }
 
-void JsonStream::receivePacket(const char *packet, int packet_len) {
+void JsonStream::receivePacket(const uint8_t *packet, int packet_len) {
   size_t doc_size = packet_len * 2;
   if (doc_size > 2048) {
     doc_size = 2048;
@@ -57,7 +57,7 @@ bool JsonStream::sendJson(const JsonDocument &doc, bool now) {
     Serial.println(packet);
   }
   
-  bool result = sendPacket(packet, packet_len);
+  bool result = sendPacket((uint8_t*)packet, packet_len);
   delete[] packet;
   return result;
 }

@@ -12,7 +12,7 @@ class JsonStream : public PacketStream {
   // configuration
   bool debug_json = false;
   // private methods
-  void receivePacket(const char *data, int len);
+  void receivePacket(const uint8_t *data, int len);
  public:
   JsonStream(int rx_buffer_len, int tx_buffer_len);
   // metrics
