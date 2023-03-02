@@ -7,6 +7,7 @@
 #include "FileWriter.hpp"
 #include "FirmwareWriter.hpp"
 #include "JsonStream.hpp"
+#include "TimeLib.h"
 
 typedef std::function<void()> NetThingConnectHandler;
 typedef std::function<void()> NetThingDisconnectHandler;
@@ -61,6 +62,7 @@ class NetThing {
   void cmdReset(const JsonDocument &doc);
   void cmdRestart(const JsonDocument &doc);
   void cmdSystemQuery(const JsonDocument &doc);
+  void cmdTime(const JsonDocument &doc);
   void sendFileInfo(const char *filename);
  public:
   NetThing();

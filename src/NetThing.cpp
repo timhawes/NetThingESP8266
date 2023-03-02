@@ -9,6 +9,8 @@ NetThing::NetThing():
   snprintf(chip_id, sizeof(chip_id), "%06x", ESP.getChipId());
   server_username = chip_id;
 
+  setSyncInterval(3600);
+
   wifiEventConnectHandler = WiFi.onStationModeGotIP(std::bind(&NetThing::wifiConnectHandler, this));
   wifiEventDisconnectHandler = WiFi.onStationModeDisconnected(std::bind(&NetThing::wifiDisconnectHandler, this));
   jsonstream.onConnect(std::bind(&NetThing::jsonConnectHandler, this));
@@ -231,6 +233,8 @@ void NetThing::jsonReceiveHandler(const JsonDocument &doc) {
       cmdNetMetricsQuery(doc);
     } else if (strcmp(cmd, "system_query") == 0) {
       cmdSystemQuery(doc);
+    } else if (strcmp(cmd, "time") == 0) {
+      cmdTime(doc);
     } else {
       // unknown command, refer to application
       if (receivejson_callback) {
@@ -474,6 +478,9 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   reply["esp_heap_fragmentation"] = ESP.getHeapFragmentation();
   reply["esp_max_free_block_size"] = ESP.getMaxFreeBlockSize();
   reply["millis"] = millis();
+  if (timeStatus() != timeNotSet) {
+    reply["time"] = now();
+  }
   reply["net_rx_buf_max"] = jsonstream.rx_buffer_high_watermark;
   reply["net_tcp_double_connect_errors"] = jsonstream.tcp_double_connect_errors;
   reply["net_tcp_reconns"] = jsonstream.tcp_connects;
@@ -554,4 +561,10 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   reply["millis"] = millis();
   reply.shrinkToFit();
   sendJson(reply);
+}
+
+void NetThing::cmdTime(const JsonDocument &doc) {
+  if (doc["time"] > 0) {
+    setTime(doc["time"]);
+  }
 }
