@@ -559,6 +559,13 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   reply["fs_block_size"] = fs_info.blockSize;
   reply["fs_page_size"] = fs_info.pageSize;
   reply["millis"] = millis();
+  if (timeStatus() != timeNotSet) {
+    reply["time"] = now();
+  }
+  if (restarted) {
+    reply["restarted"] = true;
+    restarted = false;
+  }
   reply.shrinkToFit();
   sendJson(reply);
 }

@@ -38,6 +38,7 @@ class NetThing {
   bool connect_scheduled = false;
   unsigned long connect_scheduled_time = 0;
   unsigned long last_packet_received = 0;
+  bool restarted = true; // the system has been restarted, will be set to false when it has been logged
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
   // metrics
