@@ -252,7 +252,7 @@ size_t PacketStream::processRxBuffer() {
     // at least two bytes in the buffer
     char peekbuf[2];
     rx_buffer.peek(peekbuf, 2);
-    uint16_t length = (peekbuf[0] << 8) | peekbuf[1];
+    unsigned int length = (peekbuf[0] << 8) | peekbuf[1];
     if (rx_buffer.available() >= length + 2) {
       uint8_t *packet = new uint8_t[length+1];
       rx_buffer.remove(2);
@@ -261,7 +261,7 @@ size_t PacketStream::processRxBuffer() {
       packet[length] = 0;
       if (debug_packet) {
         Serial.print("PacketStream: recv ");
-        for (int i=0; i<length; i++) {
+        for (unsigned int i=0; i<length; i++) {
           Serial.printf("%02x", packet[i]);
         }
         Serial.println();
