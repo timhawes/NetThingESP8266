@@ -6,6 +6,9 @@ using namespace std::placeholders;
 NetThing::NetThing():
   jsonstream(1500, 1500)
 {
+  snprintf(chip_id, sizeof(chip_id), "%06x", ESP.getChipId());
+  server_username = chip_id;
+
   wifiEventConnectHandler = WiFi.onStationModeGotIP(std::bind(&NetThing::wifiConnectHandler, this));
   wifiEventDisconnectHandler = WiFi.onStationModeDisconnected(std::bind(&NetThing::wifiDisconnectHandler, this));
   jsonstream.onConnect(std::bind(&NetThing::jsonConnectHandler, this));
@@ -116,6 +119,11 @@ void NetThing::setCommandKey(const char *key) {
 
 void NetThing::setCred(const char *username, const char *password) {
   server_username = username;
+  server_password = password;
+}
+
+void NetThing::setCred(const char *password) {
+  server_username = chip_id;
   server_password = password;
 }
 

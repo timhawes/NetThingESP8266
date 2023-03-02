@@ -27,6 +27,7 @@ class NetThing {
   WiFiEventHandler wifiEventConnectHandler;
   WiFiEventHandler wifiEventDisconnectHandler;
   // configuration
+  char chip_id[7];
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
@@ -72,6 +73,7 @@ class NetThing {
   void reconnect();
   bool sendJson(const JsonDocument &doc, bool now=false);
   void setCred(const char *username, const char *password);
+  void setCred(const char *password);
   void setCommandKey(const char *key);
   void setDebug(bool enabled);
   void setServer(const char *host, int port,
