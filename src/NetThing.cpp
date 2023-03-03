@@ -575,3 +575,26 @@ void NetThing::cmdTime(const JsonDocument &doc) {
     setTime(doc["time"]);
   }
 }
+
+void NetThing::sendEvent(const char* event, const char* message) {
+  StaticJsonDocument<JSON_OBJECT_SIZE(5)> obj;
+  obj["cmd"] = "event";
+  obj["millis"] = millis();
+  if (timeStatus() != timeNotSet) {
+    obj["time"] = now();
+  }
+  obj["event"] = event;
+  if (message) {
+    obj["message"] = message;
+  }
+  sendJson(obj);
+}
+
+void NetThing::sendEvent(const char* event, size_t size, const char* format, ...) {
+  char message[size];
+  va_list args;
+  va_start(args, format);
+  vsnprintf(message, size, format, args);
+  va_end(args);
+  sendEvent(event, message);
+}

@@ -87,6 +87,8 @@ class NetThing {
   void setWiFi(const char *ssid, const char *password);
   void start();
   void stop();
+  void sendEvent(const char* event, const char* message=NULL);
+  void sendEvent(const char* event, size_t size, const char* format, ...);
 };
 
 #endif
