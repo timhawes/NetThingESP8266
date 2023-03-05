@@ -34,4 +34,4 @@ jobs:
       run: |
         pre-commit run --all-files
     - name: PlatformIO test build
-      run: platformio ci examples/test/main.cpp -l . --project-conf examples/test/platformio.ini --board=esp12e
+      run: platformio ci examples/test/main.cpp -l . --project-conf examples/test/platformio.ini
