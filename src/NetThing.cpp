@@ -3,9 +3,7 @@
 
 using namespace std::placeholders;
 
-NetThing::NetThing():
-  jsonstream(1500, 1500)
-{
+NetThing::NetThing() {
   snprintf(chip_id, sizeof(chip_id), "%06x", ESP.getChipId());
   server_username = chip_id;
 
@@ -13,14 +11,17 @@ NetThing::NetThing():
 
   wifiEventConnectHandler = WiFi.onStationModeGotIP(std::bind(&NetThing::wifiConnectHandler, this));
   wifiEventDisconnectHandler = WiFi.onStationModeDisconnected(std::bind(&NetThing::wifiDisconnectHandler, this));
-  jsonstream.onConnect(std::bind(&NetThing::jsonConnectHandler, this));
-  jsonstream.onDisconnect(std::bind(&NetThing::jsonDisconnectHandler, this));
-  jsonstream.onReceiveJson(std::bind(&NetThing::jsonReceiveHandler, this, _1));
+
+  ps = new PacketStream(1500, 1500);
+  ps->onConnect(std::bind(&NetThing::psConnectHandler, this));
+  ps->onDisconnect(std::bind(&NetThing::psDisconnectHandler, this));
+  ps->onReceivePacket(std::bind(&NetThing::psReceiveHandler, this, _1, _2));
+
   file_writer = new FileWriter;
   firmware_writer = new FirmwareWriter;
 }
 
-void NetThing::jsonConnectHandler() {
+void NetThing::psConnectHandler() {
   StaticJsonDocument<JSON_OBJECT_SIZE(4) + 128> doc;
   doc[cmd_key] = "hello";
   doc["clientid"] = server_username;
@@ -32,7 +33,7 @@ void NetThing::jsonConnectHandler() {
   }
 }
 
-void NetThing::jsonDisconnectHandler() {
+void NetThing::psDisconnectHandler() {
   file_writer->abort();
   firmware_writer->abort();
   if (disconnect_callback) {
@@ -41,7 +42,7 @@ void NetThing::jsonDisconnectHandler() {
 }
 
 void NetThing::loop() {
-  jsonstream.loop();
+  ps->loop();
 
   if (restart_needed) {
     if (restart_callback) {
@@ -120,7 +121,18 @@ void NetThing::allowFirmwareSync(bool allow) {
 }
 
 bool NetThing::sendJson(const JsonDocument &doc, bool now) {
-  return jsonstream.sendJson(doc);
+  int packet_len = measureJson(doc);
+  char *packet = new char[packet_len+1];
+  serializeJson(doc, packet, packet_len+1);
+
+  if (debug_json) {
+    Serial.printf("NetThing: send usage=%d/%d len=%d json=", doc.memoryUsage(), doc.capacity(), packet_len);
+    Serial.println(packet);
+  }
+
+  bool result = ps->send((uint8_t*)packet, packet_len);
+  delete[] packet;
+  return result;
 }
 
 void NetThing::setCommandKey(const char *key) {
@@ -138,14 +150,15 @@ void NetThing::setCred(const char *password) {
 }
 
 void NetThing::setDebug(bool enabled) {
-  jsonstream.setDebug(enabled);
+  ps->setDebug(enabled);
+  debug_json = enabled;
 }
 
 void NetThing::setServer(const char *host, int port,
                               bool secure, bool verify,
                               const uint8_t *fingerprint1,
                               const uint8_t *fingerprint2) {
-  jsonstream.setServer(host, port, secure, verify, fingerprint1, fingerprint2);
+  ps->setServer(host, port, secure, verify, fingerprint1, fingerprint2);
 }
 
 void NetThing::setWatchdog(unsigned int timeout) {
@@ -161,11 +174,11 @@ void NetThing::setWiFi(const char *ssid, const char *password) {
 }
 
 void NetThing::start() {
-  jsonstream.start();
+  ps->start();
 }
 
 void NetThing::stop() {
-  jsonstream.stop();
+  ps->stop();
 }
 
 void NetThing::wifiConnectHandler() {
@@ -489,17 +502,17 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   if (timeStatus() != timeNotSet) {
     reply["time"] = now();
   }
-  reply["net_rx_buf_max"] = jsonstream.rx_buffer_high_watermark;
-  reply["net_tcp_double_connect_errors"] = jsonstream.tcp_double_connect_errors;
-  reply["net_tcp_reconns"] = jsonstream.tcp_connects;
-  reply["net_tcp_fingerprint_errors"] = jsonstream.tcp_fingerprint_errors;
-  reply["net_tcp_async_errors"] = jsonstream.tcp_async_errors;
-  reply["net_tcp_sync_errors"] = jsonstream.tcp_sync_errors;
-  reply["net_tx_buf_max"] = jsonstream.tx_buffer_high_watermark;
-  reply["net_tx_delay_count"] = jsonstream.tx_delay_count;
-  reply["net_json_parse_errors"] = jsonstream.json_parse_errors;
-  reply["net_json_parse_ok"] = jsonstream.json_parse_ok;
-  reply["net_json_parse_max_usage"] = jsonstream.json_parse_max_usage;
+  reply["net_rx_buf_max"] = ps->rx_buffer_high_watermark;
+  reply["net_tcp_double_connect_errors"] = ps->tcp_double_connect_errors;
+  reply["net_tcp_reconns"] = ps->tcp_connects;
+  reply["net_tcp_fingerprint_errors"] = ps->tcp_fingerprint_errors;
+  reply["net_tcp_async_errors"] = ps->tcp_async_errors;
+  reply["net_tcp_sync_errors"] = ps->tcp_sync_errors;
+  reply["net_tx_buf_max"] = ps->tx_buffer_high_watermark;
+  reply["net_tx_delay_count"] = ps->tx_delay_count;
+  reply["net_json_parse_errors"] = json_parse_errors;
+  reply["net_json_parse_ok"] = json_parse_ok;
+  reply["net_json_parse_max_usage"] = json_parse_max_usage;
   reply["net_wifi_reconns"] = wifi_reconnections;
   reply["net_wifi_rssi"] = WiFi.RSSI();
   reply.shrinkToFit();
@@ -582,6 +595,36 @@ void NetThing::cmdTime(const JsonDocument &doc) {
   if (doc["time"] > 0) {
     setTime(doc["time"]);
   }
+}
+
+void NetThing::psReceiveHandler(uint8_t* packet, size_t packet_len) {
+  DynamicJsonDocument doc(512);
+  DeserializationError err = deserializeJson(doc, packet, packet_len);
+
+  if (err) {
+    json_parse_errors++;
+    Serial.printf("NetThing: receive len=%d usage=-/%d error=%s packet=", packet_len, doc.capacity(), err.c_str());
+    for (unsigned int i=0; i<packet_len; i++) {
+      Serial.printf("%02x", packet[i]);
+    }
+    Serial.println();
+    return;
+  }
+
+  json_parse_ok++;
+  if (doc.memoryUsage() > json_parse_max_usage) {
+    json_parse_max_usage = doc.memoryUsage();
+  }
+
+  if (debug_json) {
+    Serial.printf("NetThing: recv len=%d usage=%d/%d json=", packet_len, doc.memoryUsage(), doc.capacity());
+    serializeJson(doc, Serial);
+    Serial.println();
+  }
+
+  doc.shrinkToFit();
+
+  jsonReceiveHandler(doc);
 }
 
 void NetThing::sendEvent(const char* event, const char* message) {

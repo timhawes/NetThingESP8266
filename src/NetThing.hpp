@@ -6,7 +6,7 @@
 #include "ESP8266WiFi.h"
 #include "FileWriter.hpp"
 #include "FirmwareWriter.hpp"
-#include "JsonStream.hpp"
+#include "PacketStream.hpp"
 #include "TimeLib.h"
 
 typedef std::function<void()> NetThingConnectHandler;
@@ -22,7 +22,7 @@ class NetThing {
   NetThingRestartRequestHandler restart_callback;
   NetThingReceivePacketHandler receivejson_callback;
   NetThingTransferStatusHandler transfer_status_callback;
-  JsonStream jsonstream;
+  PacketStream *ps;
   FirmwareWriter *firmware_writer;
   FileWriter *file_writer;
   WiFiEventHandler wifiEventConnectHandler;
@@ -33,21 +33,24 @@ class NetThing {
   const char *server_username;
   const char *server_password;
   unsigned int watchdog_timeout = 0;
+  bool debug_json = false;
   bool allow_firmware_sync = true;
   bool allow_file_sync = true;
   // state
   bool enabled = false;
-  bool connect_scheduled = false;
-  unsigned long connect_scheduled_time = 0;
   unsigned long last_packet_received = 0;
   bool restarted = true; // the system has been restarted, will be set to false when it has been logged
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
   // metrics
+  unsigned int json_parse_max_usage = 0;
+  unsigned long json_parse_errors = 0;
+  unsigned long json_parse_ok = 0;
   unsigned long wifi_reconnections = 0;
   // private methods
-  void jsonConnectHandler();
-  void jsonDisconnectHandler();
+  void psConnectHandler();
+  void psDisconnectHandler();
+  void psReceiveHandler(uint8_t* packet, size_t packet_len);
   void jsonReceiveHandler(const JsonDocument &doc);
   void wifiConnectHandler();
   void wifiDisconnectHandler();

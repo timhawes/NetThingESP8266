@@ -11,6 +11,10 @@ PacketStream::PacketStream(int rx_buffer_len, int tx_buffer_len):
 
 }
 
+void PacketStream::setDebug(bool enable) {
+  debug = enable;
+}
+
 void PacketStream::setServer(const char *host, int port,
                              bool secure, bool verify,
                              const uint8_t *fingerprint1,
@@ -42,7 +46,6 @@ void PacketStream::start() {
 
 void PacketStream::stop() {
   enabled = false;
-  //reconnect_ticker.detach();
   client.close(true);
 }
 
@@ -132,7 +135,7 @@ void PacketStream::connect() {
   NULL);
 
   client.onData([=](void *arg, AsyncClient *c, void *data, size_t len) {
-    if (debug_packet) {
+    if (debug) {
       Serial.print("PacketStream: received ");
       Serial.print(len, DEC);
       Serial.println(" bytes");
@@ -169,10 +172,10 @@ void PacketStream::connect() {
   }
 }
 
-bool PacketStream::sendPacket(const uint8_t* packet, size_t packet_len) {
+bool PacketStream::send(const uint8_t* packet, size_t packet_len) {
   char header[3];
 
-  if (debug_packet) {
+  if (debug) {
     Serial.print("PacketStream: send ");
     for (unsigned int i=0; i<packet_len; i++) {
       printf("%02x", packet[i]);
@@ -228,7 +231,7 @@ size_t PacketStream::processTxBuffer() {
       delete[] out;
       return sent;
     } else {
-      if (debug_packet) {
+      if (debug) {
         Serial.println("PacketStream: can't send yet");
       }
       tx_delay_count++;
@@ -259,7 +262,7 @@ size_t PacketStream::processRxBuffer() {
       rx_buffer.read((char*)packet, length);
       processed_bytes++;
       packet[length] = 0;
-      if (debug_packet) {
+      if (debug) {
         Serial.print("PacketStream: recv ");
         for (unsigned int i=0; i<length; i++) {
           Serial.printf("%02x", packet[i]);

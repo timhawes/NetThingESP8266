@@ -8,7 +8,7 @@
 
 typedef std::function<void()> PacketStreamConnectHandler;
 typedef std::function<void()> PacketStreamDisconnectHandler;
-typedef std::function<void(const uint8_t *data, int len)> PacketStreamReceivePacketHandler;
+typedef std::function<void(uint8_t *data, int len)> PacketStreamReceivePacketHandler;
 
 class PacketStream {
  private:
@@ -19,7 +19,7 @@ class PacketStream {
   PacketStreamDisconnectHandler disconnect_callback;
   PacketStreamReceivePacketHandler receivepacket_callback;
   // configuration
-  bool debug_packet = false;
+  bool debug = false;
   const char *server_host;
   int server_port;
   bool server_secure;
@@ -55,6 +55,7 @@ class PacketStream {
   unsigned long packet_queue_full = 0;
   unsigned long packet_queue_ok = 0;
   // public methods
+  void setDebug(bool enable);
   void setServer(const char *host, int port,
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,
@@ -65,7 +66,7 @@ class PacketStream {
   void start();
   void stop();
   void reconnect();
-  bool sendPacket(const uint8_t* data, size_t size);
+  bool send(const uint8_t* data, size_t len);
   void loop();
 };
 
