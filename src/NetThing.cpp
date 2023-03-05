@@ -111,6 +111,14 @@ void NetThing::onTransferStatus(NetThingTransferStatusHandler callback) {
   transfer_status_callback = callback;
 }
 
+void NetThing::allowFileSync(bool allow) {
+  allow_file_sync = allow;
+}
+
+void NetThing::allowFirmwareSync(bool allow) {
+  allow_firmware_sync = allow;
+}
+
 bool NetThing::sendJson(const JsonDocument &doc, bool now) {
   return jsonstream.sendJson(doc);
 }
@@ -202,21 +210,21 @@ void NetThing::jsonReceiveHandler(const JsonDocument &doc) {
   if (doc.containsKey(cmd_key)) {
     const char *cmd = doc[cmd_key];
     if (strcmp(cmd, "file_data") == 0) {
-      cmdFileData(doc);
+      if (allow_file_sync) cmdFileData(doc);
     } else if (strcmp(cmd, "file_delete") == 0) {
-      cmdFileDelete(doc);
+      if (allow_file_sync) cmdFileDelete(doc);
     } else if (strcmp(cmd, "file_dir_query") == 0) {
-      cmdFileDirQuery(doc);
+      if (allow_file_sync) cmdFileDirQuery(doc);
     } else if (strcmp(cmd, "file_query") == 0) {
-      cmdFileQuery(doc);
+      if (allow_file_sync) cmdFileQuery(doc);
     } else if (strcmp(cmd, "file_rename") == 0) {
-      cmdFileRename(doc);
+      if (allow_file_sync) cmdFileRename(doc);
     } else if (strcmp(cmd, "file_write") == 0) {
-      cmdFileWrite(doc);
+      if (allow_file_sync) cmdFileWrite(doc);
     } else if (strcmp(cmd, "firmware_data") == 0) {
-      cmdFirmwareData(doc);
+      if (allow_firmware_sync) cmdFirmwareData(doc);
     } else if (strcmp(cmd, "firmware_write") == 0) {
-      cmdFirmwareWrite(doc);
+      if (allow_firmware_sync) cmdFirmwareWrite(doc);
     } else if (strcmp(cmd, "keepalive") == 0) {
       // ignore
     } else if (strcmp(cmd, "ping") == 0) {

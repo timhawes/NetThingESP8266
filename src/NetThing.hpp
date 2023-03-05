@@ -33,6 +33,8 @@ class NetThing {
   const char *server_username;
   const char *server_password;
   unsigned int watchdog_timeout = 0;
+  bool allow_firmware_sync = true;
+  bool allow_file_sync = true;
   // state
   bool enabled = false;
   bool connect_scheduled = false;
@@ -74,6 +76,8 @@ class NetThing {
   void onRestartRequest(NetThingRestartRequestHandler callback);
   void onTransferStatus(NetThingTransferStatusHandler callback);
   void reconnect();
+  void allowFileSync(bool allow);
+  void allowFirmwareSync(bool allow);
   bool sendJson(const JsonDocument &doc, bool now=false);
   void setCred(const char *username, const char *password);
   void setCred(const char *password);
