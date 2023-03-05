@@ -3,9 +3,11 @@
 
 #include <functional>
 #include "ArduinoJson.h"
-#include "ESP8266WiFi.h"
+#include "WiFi.h"
 #include "FileWriter.hpp"
 #include "FirmwareWriter.hpp"
+#include "FS.h"
+#include "SPIFFS.h"
 #include "PacketStream.hpp"
 #include "TimeLib.h"
 
@@ -25,17 +27,15 @@ class NetThing {
   PacketStream *ps;
   FirmwareWriter *firmware_writer;
   FileWriter *file_writer;
-  WiFiEventHandler wifiEventConnectHandler;
-  WiFiEventHandler wifiEventDisconnectHandler;
   // configuration
-  char chip_id[7];
+  char mac_address[13] = "";
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
   unsigned int watchdog_timeout = 0;
   bool debug_json = false;
-  bool allow_firmware_sync = true;
-  bool allow_file_sync = true;
+  bool allow_firmware_sync = false;
+  bool allow_file_sync = false;
   // state
   bool enabled = false;
   unsigned long last_packet_received = 0;
@@ -87,15 +87,16 @@ class NetThing {
   void setCommandKey(const char *key);
   void setDebug(bool enabled);
   void setServer(const char *host, int port,
-                 bool secure=false, bool verify=false,
-                 const uint8_t *fingerprint1=NULL,
-                 const uint8_t *fingerprint2=NULL);
+                 bool tls=true, bool verify=false,
+                 const char *fingerprint1=NULL,
+                 const char *fingerprint2=NULL);
   void setWatchdog(unsigned int timeout);
   void setWiFi(const char *ssid, const char *password);
   void start();
   void stop();
   void sendEvent(const char* event, const char* message=NULL);
   void sendEvent(const char* event, size_t size, const char* format, ...);
+  void begin();
 };
 
 #endif

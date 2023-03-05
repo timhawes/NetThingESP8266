@@ -1,6 +1,6 @@
 #include "FirmwareWriter.hpp"
 
-#include <Updater.h>
+#include <Update.h>
 
 FirmwareWriter::FirmwareWriter() {
   strncpy(_md5, "", sizeof(_md5));
@@ -13,10 +13,8 @@ FirmwareWriter::~FirmwareWriter() {
 
 void FirmwareWriter::abort() {
   if (started) {
-    // write some dummy data to break the MD5 check
-    Update.write((uint8_t *)"_ABORT_", 7);
-    // end the update
-    Update.end();
+    Serial.println("FirmwareWriter: abort");
+    Update.abort();
     strncpy(_md5, "", sizeof(_md5));
     _size = 0;
     started = false;
@@ -37,24 +35,7 @@ bool FirmwareWriter::add(uint8_t *data, unsigned int len, unsigned int pos) {
     return false;
   }
   if (position == 0 && (!started)) {
-    if (len < 4) {
-      // need at least 4 bytes to check the file header
-      Serial.println("FirmwareWriter: need at least 4 bytes to check the file header");
-      return false;
-    }
-    if (data[0] != 0xE9) {
-      // magic header doesn't start with 0xE9
-      Serial.println("FirmwareWriter: magic header doesn't start with 0xE9");
-      return false;
-    }
-    uint32_t bin_flash_size = ESP.magicFlashChipSize((data[3] & 0xf0) >> 4);
-    // new file doesn't fit into flash
-    if (bin_flash_size > ESP.getFlashChipRealSize()) {
-      Serial.println("FirmwareWriter: new file won't fit into flash");
-      return false;
-    }
-    Update.runAsync(true);
-    if (!Update.begin(_size, U_FLASH)) {
+    if (!Update.begin(_size)) {
       Serial.println("FirmwareWriter: Update.begin() failed");
       Update.printError(Serial);
       return false;

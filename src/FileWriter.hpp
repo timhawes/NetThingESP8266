@@ -3,12 +3,14 @@
 
 #include <Arduino.h>
 #include <FS.h>
+#include <SPIFFS.h>
+#include <MD5Builder.h>
 
 class FileWriter {
  private:
   File file_handle;
-  char _filename[31];
-  char _tmp_filename[32];
+  char _filename[CONFIG_SPIFFS_OBJ_NAME_LEN-1];
+  char _tmp_filename[CONFIG_SPIFFS_OBJ_NAME_LEN];
   char _md5[33];
   size_t _size = 0;
   bool active = false;
