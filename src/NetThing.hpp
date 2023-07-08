@@ -81,6 +81,7 @@ class NetThing {
   void reconnect();
   void allowFileSync(bool allow);
   void allowFirmwareSync(bool allow);
+  bool canFeedWatchdog();
   bool sendJson(const JsonDocument &doc, bool now=false);
   void setCred(const char *username, const char *password);
   void setCred(const char *password);

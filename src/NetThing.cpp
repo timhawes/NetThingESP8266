@@ -649,3 +649,13 @@ void NetThing::sendEvent(const char* event, size_t size, const char* format, ...
   va_end(args);
   sendEvent(event, message);
 }
+
+bool NetThing::canFeedWatchdog() {
+  if (watchdog_timeout > 0) {
+    if (millis() - last_packet_received > watchdog_timeout) {
+      Serial.println("NetThing: withholding watchdog feed");
+      return false;
+    }
+  }
+  return true;
+}
