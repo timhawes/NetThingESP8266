@@ -42,6 +42,8 @@ void NetThing::psDisconnectHandler() {
 }
 
 void NetThing::loop() {
+  loopwatchdog.feed();
+
   ps->loop();
 
   if (restart_needed) {
@@ -77,9 +79,9 @@ void NetThing::loop() {
     }
   }
 
-  if (watchdog_timeout > 0) {
-    if (millis() - last_packet_received > watchdog_timeout) {
-      Serial.println("NetThing: watchdog triggered, restarting");
+  if (receive_watchdog_timeout > 0) {
+    if ((long)(millis() - last_packet_received) > receive_watchdog_timeout) {
+      Serial.println("NetThing: receive watchdog triggered, restarting");
       if (restart_callback) {
         // main application may restart if convenient
         restart_callback(false, restart_firmware);
@@ -161,8 +163,12 @@ void NetThing::setServer(const char *host, int port,
   ps->setServer(host, port, secure, verify, fingerprint1, fingerprint2);
 }
 
-void NetThing::setWatchdog(unsigned int timeout) {
-  watchdog_timeout = timeout;
+void NetThing::setReceiveWatchdog(unsigned long timeout) {
+  receive_watchdog_timeout = timeout;
+}
+
+void NetThing::setLoopWatchdog(unsigned long timeout) {
+  loopwatchdog.setTimeout(timeout);
 }
 
 void NetThing::setWiFi(const char *ssid, const char *password) {
@@ -586,6 +592,9 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   if (timeStatus() != timeNotSet) {
     reply["time"] = now();
   }
+  if (loopwatchdog.restarted()) {
+    reply["net_reset_info"] = "loop() watchdog timeout";
+  }
   if (restarted) {
     reply["restarted"] = true;
     restarted = false;
@@ -651,14 +660,4 @@ void NetThing::sendEvent(const char* event, size_t size, const char* format, ...
   vsnprintf(message, size, format, args);
   va_end(args);
   sendEvent(event, message);
-}
-
-bool NetThing::canFeedWatchdog() {
-  if (watchdog_timeout > 0) {
-    if (millis() - last_packet_received > watchdog_timeout) {
-      Serial.println("NetThing: withholding watchdog feed");
-      return false;
-    }
-  }
-  return true;
 }

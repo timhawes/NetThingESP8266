@@ -8,6 +8,7 @@
 #include "FirmwareWriter.hpp"
 #include "PacketStream.hpp"
 #include "TimeLib.h"
+#include "LoopWatchdog.hpp"
 
 typedef std::function<void()> NetThingConnectHandler;
 typedef std::function<void()> NetThingDisconnectHandler;
@@ -27,12 +28,14 @@ class NetThing {
   FileWriter *file_writer;
   WiFiEventHandler wifiEventConnectHandler;
   WiFiEventHandler wifiEventDisconnectHandler;
+  LoopWatchdog loopwatchdog;
   // configuration
   char chip_id[7];
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
-  unsigned int watchdog_timeout = 0;
+  unsigned long receive_watchdog_timeout = 0; // restart if no packet received for this ms period
+  unsigned long loop_watchdog_timeout = 60000; // restart if loop() not called for this ms period
   bool debug_json = false;
   bool allow_firmware_sync = true;
   bool allow_file_sync = true;
@@ -81,7 +84,6 @@ class NetThing {
   void reconnect();
   void allowFileSync(bool allow);
   void allowFirmwareSync(bool allow);
-  bool canFeedWatchdog();
   bool sendJson(const JsonDocument &doc, bool now=false);
   void setCred(const char *username, const char *password);
   void setCred(const char *password);
@@ -91,7 +93,8 @@ class NetThing {
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,
                  const uint8_t *fingerprint2=NULL);
-  void setWatchdog(unsigned int timeout);
+  void setReceiveWatchdog(unsigned long timeout);
+  void setLoopWatchdog(unsigned long timeout);
   void setWiFi(const char *ssid, const char *password);
   void start();
   void stop();
