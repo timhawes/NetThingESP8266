@@ -71,7 +71,7 @@ class NetThing {
   void cmdTime(const JsonDocument &doc);
   void sendFileInfo(const char *filename);
  public:
-  NetThing();
+  NetThing(int rx_buffer_len=1500, int tx_buffer_len=1500);
   void loop();
   void onConnect(NetThingConnectHandler callback);
   void onDisconnect(NetThingDisconnectHandler callback);

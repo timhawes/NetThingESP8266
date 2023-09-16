@@ -3,7 +3,7 @@
 
 using namespace std::placeholders;
 
-NetThing::NetThing() {
+NetThing::NetThing(int rx_buffer_len, int tx_buffer_len) {
   snprintf(chip_id, sizeof(chip_id), "%06x", ESP.getChipId());
   server_username = chip_id;
 
@@ -12,7 +12,7 @@ NetThing::NetThing() {
   wifiEventConnectHandler = WiFi.onStationModeGotIP(std::bind(&NetThing::wifiConnectHandler, this));
   wifiEventDisconnectHandler = WiFi.onStationModeDisconnected(std::bind(&NetThing::wifiDisconnectHandler, this));
 
-  ps = new PacketStream(1500, 1500);
+  ps = new PacketStream(rx_buffer_len, tx_buffer_len);
   ps->onConnect(std::bind(&NetThing::psConnectHandler, this));
   ps->onDisconnect(std::bind(&NetThing::psDisconnectHandler, this));
   ps->onReceivePacket(std::bind(&NetThing::psReceiveHandler, this, _1, _2));
