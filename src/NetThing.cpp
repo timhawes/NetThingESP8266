@@ -510,6 +510,9 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   reply["net_tcp_sync_errors"] = ps->tcp_sync_errors;
   reply["net_tx_buf_max"] = ps->tx_buffer_high_watermark;
   reply["net_tx_delay_count"] = ps->tx_delay_count;
+  reply["net_tx_queue_error"] = ps->packet_queue_error;
+  reply["net_tx_queue_full"] = ps->packet_queue_full;
+  reply["net_tx_queue_ok"] = ps->packet_queue_ok;
   reply["net_json_parse_errors"] = json_parse_errors;
   reply["net_json_parse_ok"] = json_parse_ok;
   reply["net_json_parse_max_usage"] = json_parse_max_usage;
