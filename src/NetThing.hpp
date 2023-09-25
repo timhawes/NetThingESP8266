@@ -45,6 +45,7 @@ class NetThing {
   bool restarted = true; // the system has been restarted, will be set to false when it has been logged
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
+  time_t boot_time = 0;
   // metrics
   unsigned int json_parse_max_usage = 0;
   unsigned long json_parse_errors = 0;

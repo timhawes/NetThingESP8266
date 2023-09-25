@@ -591,6 +591,8 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   reply["millis"] = millis();
   if (timeStatus() != timeNotSet) {
     reply["time"] = now();
+    reply["boot_time"] = boot_time;
+    reply["uptime"] = now() - boot_time;
   }
   if (loopwatchdog.restarted()) {
     reply["net_reset_info"] = "loop() watchdog timeout";
@@ -606,6 +608,9 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
 void NetThing::cmdTime(const JsonDocument &doc) {
   if (doc["time"] > 0) {
     setTime(doc["time"]);
+    if (boot_time == 0) {
+      boot_time = now() - (millis() * 1000);
+    }
   }
 }
 
