@@ -609,7 +609,7 @@ void NetThing::cmdTime(const JsonDocument &doc) {
   if (doc["time"] > 0) {
     setTime(doc["time"]);
     if (boot_time == 0) {
-      boot_time = now() - (millis() * 1000);
+      boot_time = now() - (millis() / 1000);
     }
   }
 }
