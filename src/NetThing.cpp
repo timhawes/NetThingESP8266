@@ -507,6 +507,8 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   reply["millis"] = millis();
   if (timeStatus() != timeNotSet) {
     reply["time"] = now();
+    reply["boot_time"] = boot_time;
+    reply["uptime"] = now() - boot_time;
   }
   reply["net_rx_buf_max"] = ps->rx_buffer_high_watermark;
   reply["net_tcp_double_connect_errors"] = ps->tcp_double_connect_errors;
