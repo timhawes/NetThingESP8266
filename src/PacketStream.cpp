@@ -305,7 +305,7 @@ void PacketStream::scheduleConnect() {
     }
 
     Serial.print("PacketStream: reconnecting in ");
-    Serial.print(reconnect_interval, DEC);
+    Serial.print(splayed_reconnect_interval, DEC);
     Serial.println("ms");
     connect_scheduled_time = millis() + splayed_reconnect_interval;
     connect_scheduled = true;
