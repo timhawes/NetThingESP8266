@@ -90,6 +90,8 @@ class NetThing {
   void setCred(const char *password);
   void setCommandKey(const char *key);
   void setDebug(bool enabled);
+  void setReconnectMaxTime(unsigned long ms);
+  void setConnectionStableTime(unsigned long ms);
   void setServer(const char *host, int port,
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,

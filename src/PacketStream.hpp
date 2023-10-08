@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include "cbuf.h"
+#include "ESP8266WiFi.h"
 #include <ESPAsyncTCP.h>
 #include <functional>
 
@@ -26,13 +27,19 @@ class PacketStream {
   bool server_verify;
   const uint8_t *server_fingerprint1;
   const uint8_t *server_fingerprint2;
-  unsigned int reconnect_interval = 1000;
+  unsigned long reconnect_interval_min = 500;
+  unsigned long reconnect_interval_max = 180000;
+  unsigned long reconnect_interval_backoff_factor = 2;
+  unsigned long reconnect_interval = 500; // current reconnect interval
+  unsigned long connection_stable_time = 30000; // connection considered stable after this time
   bool fast_receive = false;
   bool fast_send = false;
   // state
   bool enabled = false;
   bool connect_scheduled = false;
   unsigned long connect_scheduled_time = 0;
+  unsigned long last_connect_time = 0;
+  bool connection_stable = false;
   bool in_rx_handler = false;
   bool tcp_active = false;
   // private methods
@@ -56,6 +63,8 @@ class PacketStream {
   unsigned long packet_queue_ok = 0;
   // public methods
   void setDebug(bool enable);
+  void setReconnectMaxTime(unsigned long ms);
+  void setConnectionStableTime(unsigned long ms);
   void setServer(const char *host, int port,
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,

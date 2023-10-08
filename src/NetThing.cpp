@@ -156,6 +156,14 @@ void NetThing::setDebug(bool enabled) {
   debug_json = enabled;
 }
 
+void NetThing::setConnectionStableTime(unsigned long ms) {
+  ps->setConnectionStableTime(ms);
+}
+
+void NetThing::setReconnectMaxTime(unsigned long ms) {
+  ps->setReconnectMaxTime(ms);
+}
+
 void NetThing::setServer(const char *host, int port,
                               bool secure, bool verify,
                               const uint8_t *fingerprint1,

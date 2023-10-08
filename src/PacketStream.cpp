@@ -15,6 +15,14 @@ void PacketStream::setDebug(bool enable) {
   debug = enable;
 }
 
+void PacketStream::setConnectionStableTime(unsigned long ms) {
+  connection_stable_time = ms;
+}
+
+void PacketStream::setReconnectMaxTime(unsigned long ms) {
+  reconnect_interval_max = ms;
+}
+
 void PacketStream::setServer(const char *host, int port,
                              bool secure, bool verify,
                              const uint8_t *fingerprint1,
@@ -113,6 +121,8 @@ void PacketStream::connect() {
       }
     }
     tcp_connects++;
+    last_connect_time = millis();
+    connection_stable = false;
     rx_buffer.flush();
     tx_buffer.flush();
     Serial.println("PacketStream: connected");
@@ -285,16 +295,35 @@ size_t PacketStream::processRxBuffer() {
 
 void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
-    connect_scheduled_time = millis();
+    randomSeed(ESP.random());
+    unsigned long splayed_reconnect_interval = random(0, reconnect_interval);
+
+    Serial.print("PacketStream: reconnecting in ");
+    Serial.print(splayed_reconnect_interval, DEC);
+    Serial.println("ms");
+    connect_scheduled_time = millis() + splayed_reconnect_interval;
     connect_scheduled = true;
+
+    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor;
+    if (reconnect_interval > reconnect_interval_max) {
+      reconnect_interval = reconnect_interval_max;
+    }
   }
 }
 
 void PacketStream::loop() {
   if (connect_scheduled) {
-    if (millis() - connect_scheduled_time > reconnect_interval) {
-      connect_scheduled = false;
-      connect();
+    if ((long)(millis() - connect_scheduled_time) > 0) {
+      if (WiFi.status() == WL_CONNECTED) {
+        connect_scheduled = false;
+        connect();
+      }
+    }
+  }
+  if (!connection_stable && client.connected()) {
+    if (millis() - last_connect_time > connection_stable_time) {
+      reconnect_interval = reconnect_interval_min;
+      connection_stable = true;
     }
   }
   processRxBuffer();
