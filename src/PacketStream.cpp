@@ -303,8 +303,10 @@ void PacketStream::scheduleConnect() {
 void PacketStream::loop() {
   if (connect_scheduled) {
     if ((long)(millis() - connect_scheduled_time) > 0) {
-      connect_scheduled = false;
-      connect();
+      if (WiFi.status() == WL_CONNECTED) {
+        connect_scheduled = false;
+        connect();
+      }
     }
   }
   if (!connection_stable && client.connected()) {

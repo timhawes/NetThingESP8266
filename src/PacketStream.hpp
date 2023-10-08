@@ -3,6 +3,7 @@
 
 #include "Arduino.h"
 #include "cbuf.h"
+#include "ESP8266WiFi.h"
 #include <ESPAsyncTCP.h>
 #include <functional>
 
