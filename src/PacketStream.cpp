@@ -289,7 +289,7 @@ void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
     Serial.print("PacketStream: reconnecting in ");
     Serial.print(reconnect_interval, DEC);
-    Serial.println("s");
+    Serial.println("ms");
     connect_scheduled_time = millis() + reconnect_interval;
     connect_scheduled = true;
 
@@ -302,7 +302,7 @@ void PacketStream::scheduleConnect() {
 
 void PacketStream::loop() {
   if (connect_scheduled) {
-    if (millis() - connect_scheduled_time > 0) {
+    if (connect_scheduled_time - millis() > 0) {
       connect_scheduled = false;
       connect();
     }
