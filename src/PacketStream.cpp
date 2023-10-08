@@ -15,6 +15,14 @@ void PacketStream::setDebug(bool enable) {
   debug = enable;
 }
 
+void PacketStream::setConnectionStableTime(unsigned long ms) {
+  connection_stable_time = ms;
+}
+
+void PacketStream::setReconnectMaxBackoff(unsigned long ms) {
+  reconnect_interval_max = ms;
+}
+
 void PacketStream::setServer(const char *host, int port,
                              bool secure, bool verify,
                              const uint8_t *fingerprint1,
