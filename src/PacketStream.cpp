@@ -295,15 +295,22 @@ size_t PacketStream::processRxBuffer() {
 
 void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
+    randomSeed(ESP.random());
+    unsigned long splayed_reconnect_interval = reconnect_interval * random(95, 105) / 100;
+    if (splayed_reconnect_interval < reconnect_interval_min) {
+      splayed_reconnect_interval = reconnect_interval_min;
+    }
+    if (splayed_reconnect_interval > reconnect_interval_max) {
+      splayed_reconnect_interval = reconnect_interval_max;
+    }
+
     Serial.print("PacketStream: reconnecting in ");
     Serial.print(reconnect_interval, DEC);
     Serial.println("ms");
-    connect_scheduled_time = millis() + reconnect_interval;
+    connect_scheduled_time = millis() + splayed_reconnect_interval;
     connect_scheduled = true;
 
-    // exponential backoff + 10% random splay
-    randomSeed(ESP.random());
-    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor * random(0, 11) / 10;
+    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor;
     if (reconnect_interval > reconnect_interval_max) {
       reconnect_interval = reconnect_interval_max;
     }
