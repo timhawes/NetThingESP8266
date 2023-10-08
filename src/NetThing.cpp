@@ -160,8 +160,8 @@ void NetThing::setConnectionStableTime(unsigned long ms) {
   ps->setConnectionStableTime(ms);
 }
 
-void NetThing::setReconnectMaxBackoff(unsigned long ms) {
-  ps->setReconnectMaxBackoff(ms);
+void NetThing::setReconnectMaxTime(unsigned long ms) {
+  ps->setReconnectMaxTime(ms);
 }
 
 void NetThing::setServer(const char *host, int port,

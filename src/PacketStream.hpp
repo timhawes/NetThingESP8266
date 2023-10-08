@@ -63,7 +63,7 @@ class PacketStream {
   unsigned long packet_queue_ok = 0;
   // public methods
   void setDebug(bool enable);
-  void setReconnectMaxBackoff(unsigned long ms);
+  void setReconnectMaxTime(unsigned long ms);
   void setConnectionStableTime(unsigned long ms);
   void setServer(const char *host, int port,
                  bool secure=false, bool verify=false,

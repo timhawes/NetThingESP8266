@@ -19,7 +19,7 @@ void PacketStream::setConnectionStableTime(unsigned long ms) {
   connection_stable_time = ms;
 }
 
-void PacketStream::setReconnectMaxBackoff(unsigned long ms) {
+void PacketStream::setReconnectMaxTime(unsigned long ms) {
   reconnect_interval_max = ms;
 }
 
