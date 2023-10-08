@@ -113,6 +113,8 @@ void PacketStream::connect() {
       }
     }
     tcp_connects++;
+    last_connect_time = millis();
+    connection_stable = false;
     rx_buffer.flush();
     tx_buffer.flush();
     Serial.println("PacketStream: connected");
@@ -285,16 +287,30 @@ size_t PacketStream::processRxBuffer() {
 
 void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
-    connect_scheduled_time = millis();
+    Serial.print("PacketStream: reconnecting in ");
+    Serial.print(DEC, reconnect_interval);
+    Serial.println("s");
+    connect_scheduled_time = millis() + reconnect_interval;
     connect_scheduled = true;
+
+    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor;
+    if (reconnect_interval > reconnect_interval_max) {
+      reconnect_interval = reconnect_interval_max;
+    }
   }
 }
 
 void PacketStream::loop() {
   if (connect_scheduled) {
-    if (millis() - connect_scheduled_time > reconnect_interval) {
+    if (millis() - connect_scheduled_time > 0) {
       connect_scheduled = false;
       connect();
+    }
+  }
+  if (!connection_stable && client.connected()) {
+    if (millis() - last_connect_time > connection_stable_time) {
+      reconnect_interval = reconnect_interval_min;
+      connection_stable = true;
     }
   }
   processRxBuffer();
