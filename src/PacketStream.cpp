@@ -302,7 +302,7 @@ void PacketStream::scheduleConnect() {
 
 void PacketStream::loop() {
   if (connect_scheduled) {
-    if (connect_scheduled_time - millis() > 0) {
+    if ((long)(millis() - connect_scheduled_time) > 0) {
       connect_scheduled = false;
       connect();
     }
