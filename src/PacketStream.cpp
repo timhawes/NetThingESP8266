@@ -288,7 +288,7 @@ size_t PacketStream::processRxBuffer() {
 void PacketStream::scheduleConnect() {
   if (!connect_scheduled) {
     Serial.print("PacketStream: reconnecting in ");
-    Serial.print(DEC, reconnect_interval);
+    Serial.print(reconnect_interval, DEC);
     Serial.println("s");
     connect_scheduled_time = millis() + reconnect_interval;
     connect_scheduled = true;
@@ -309,6 +309,7 @@ void PacketStream::loop() {
   }
   if (!connection_stable && client.connected()) {
     if (millis() - last_connect_time > connection_stable_time) {
+      Serial.println("PacketStream: connection is stable");
       reconnect_interval = reconnect_interval_min;
       connection_stable = true;
     }
