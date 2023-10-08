@@ -301,7 +301,9 @@ void PacketStream::scheduleConnect() {
     connect_scheduled_time = millis() + reconnect_interval;
     connect_scheduled = true;
 
-    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor;
+    // exponential backoff + 10% random splay
+    randomSeed(ESP.random());
+    reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor * random(0, 11) / 10;
     if (reconnect_interval > reconnect_interval_max) {
       reconnect_interval = reconnect_interval_max;
     }
@@ -319,7 +321,6 @@ void PacketStream::loop() {
   }
   if (!connection_stable && client.connected()) {
     if (millis() - last_connect_time > connection_stable_time) {
-      Serial.println("PacketStream: connection is stable");
       reconnect_interval = reconnect_interval_min;
       connection_stable = true;
     }
