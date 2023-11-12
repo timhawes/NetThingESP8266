@@ -349,17 +349,20 @@ void NetThing::cmdFileDelete(const JsonDocument &obj)
 void NetThing::cmdFileDirQuery(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(1024);
-  JsonArray files = reply.createNestedArray("filenames");
+  JsonArray dirs = reply.createNestedArray("dirs");
+  JsonArray files = reply.createNestedArray("files");
   reply[cmd_key] = "file_dir_info";
   reply["path"] = obj["path"];
-  if (SPIFFS.exists((const char*)obj["path"])) {
-    Dir dir = SPIFFS.openDir((const char*)obj["path"]);
-    while (dir.next()) {
+  Dir dir = SPIFFS.openDir((const char*)obj["path"]);
+  while (dir.next()) {
+    if (dir.isDirectory()) {
+      dirs.add(dir.fileName());
+    }
+    if (dir.isFile()) {
       files.add(dir.fileName());
     }
-  } else {
-    reply["filenames"] = (char*)NULL;
   }
+  reply.shrinkToFit();
   sendJson(reply);
 }
 
