@@ -21,6 +21,19 @@ NetThing::NetThing(int rx_buffer_len, int tx_buffer_len) {
   firmware_writer = new FirmwareWriter;
 }
 
+String NetThing::canonifyFilename(String filename) {
+  if (filename[0] == '/') {
+    // absolute filename, no change
+    return filename;
+  } else if (filename_prefix) {
+    // rewrite
+    return filename_prefix + filename;
+  } else {
+    // no prefix configured
+    return filename;
+  }
+}
+
 void NetThing::psConnectHandler() {
   StaticJsonDocument<JSON_OBJECT_SIZE(4) + 128> doc;
   doc[cmd_key] = "hello";
@@ -160,6 +173,10 @@ void NetThing::setConnectionStableTime(unsigned long ms) {
   ps->setConnectionStableTime(ms);
 }
 
+void NetThing::setFilenamePrefix(const char *prefix) {
+  filename_prefix = prefix;
+}
+
 void NetThing::setReconnectMaxTime(unsigned long ms) {
   ps->setReconnectMaxTime(ms);
 }
@@ -206,11 +223,13 @@ void NetThing::wifiDisconnectHandler() {
 
 void NetThing::sendFileInfo(const char *filename)
 {
-  StaticJsonDocument<JSON_OBJECT_SIZE(4) + 64> obj;
+  StaticJsonDocument<JSON_OBJECT_SIZE(5) + 64> obj;
+  String path = canonifyFilename(filename);
   obj[cmd_key] = "file_info";
   obj["filename"] = filename;
+  obj["local_filename"] = path;
 
-  File f = SPIFFS.open(filename, "r");
+  File f = SPIFFS.open(path, "r");
   if (f) {
     MD5Builder md5;
     md5.begin();
@@ -303,7 +322,8 @@ void NetThing::cmdFileData(const JsonDocument &obj)
         sendJson(reply);
         sendFileInfo(obj["filename"]);
         if (transfer_status_callback) {
-          transfer_status_callback(obj["filename"], 100, false, true);
+          String path = canonifyFilename(obj["filename"]);
+          transfer_status_callback(path.c_str(), 100, false, true);
         }
       } else {
         // finished but commit failed
@@ -334,7 +354,9 @@ void NetThing::cmdFileDelete(const JsonDocument &obj)
 {
   StaticJsonDocument<JSON_OBJECT_SIZE(3)> reply;
 
-  if (SPIFFS.remove((const char*)obj["filename"])) {
+  String path = canonifyFilename(obj["filename"]);
+
+  if (SPIFFS.remove(path)) {
     reply[cmd_key] = "file_delete_ok";
     reply["filename"] = obj["filename"];
     sendJson(reply);
@@ -375,7 +397,10 @@ void NetThing::cmdFileRename(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(512);
 
-  if (SPIFFS.rename((const char*)obj["old_filename"], (const char*)obj["new_filename"])) {
+  String old_path = canonifyFilename(obj["old_filename"]);
+  String new_path = canonifyFilename(obj["new_filename"]);
+
+  if (SPIFFS.rename(old_path, new_path)) {
     reply[cmd_key] = "file_rename_ok";
     reply["old_filename"] = obj["old_filename"];
     reply["new_filename"] = obj["new_filename"];
@@ -393,7 +418,9 @@ void NetThing::cmdFileWrite(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(512);
 
-  if (file_writer->begin(obj["filename"], obj["md5"], obj["size"])) {
+  String path = canonifyFilename(obj["filename"]);
+
+  if (file_writer->begin(path.c_str(), obj["md5"], obj["size"])) {
     if (file_writer->upToDate()) {
         reply[cmd_key] = "file_write_error";
         reply["filename"] = obj["filename"];

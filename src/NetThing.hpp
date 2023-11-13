@@ -34,6 +34,7 @@ class NetThing {
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
+  const char *filename_prefix;
   unsigned long receive_watchdog_timeout = 0; // restart if no packet received for this ms period
   unsigned long loop_watchdog_timeout = 60000; // restart if loop() not called for this ms period
   bool debug_json = false;
@@ -52,6 +53,7 @@ class NetThing {
   unsigned long json_parse_ok = 0;
   unsigned long wifi_reconnections = 0;
   // private methods
+  String canonifyFilename(String filename);
   void psConnectHandler();
   void psDisconnectHandler();
   void psReceiveHandler(uint8_t* packet, size_t packet_len);
@@ -92,6 +94,7 @@ class NetThing {
   void setDebug(bool enabled);
   void setReconnectMaxTime(unsigned long ms);
   void setConnectionStableTime(unsigned long ms);
+  void setFilenamePrefix(const char *prefix);
   void setServer(const char *host, int port,
                  bool secure=false, bool verify=false,
                  const uint8_t *fingerprint1=NULL,
