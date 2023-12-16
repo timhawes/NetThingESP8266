@@ -44,7 +44,7 @@ class PacketStream {
   bool connect_state = false;
   bool connection_stable = false;
   bool enabled = false;
-  bool pending_connect_callback = true;
+  bool pending_connect_callback = false;
   bool pending_disconnect_callback = false;
   unsigned long last_connect_time = 0;
   unsigned long last_send = 0; // used for sending keepalives
