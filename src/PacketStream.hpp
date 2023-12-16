@@ -34,38 +34,52 @@ class PacketStream {
   const char *server_fingerprint2;
   const char *server_host;
   int server_port;
-  unsigned int reconnect_interval = 1000;
+  unsigned int keepalive_interval = 0;
+  unsigned long connection_stable_time = 30000; // connection considered stable after this time
+  unsigned long reconnect_interval = 500; // current reconnect interval
+  unsigned long reconnect_interval_backoff_factor = 2;
+  unsigned long reconnect_interval_max = 180000;
+  unsigned long reconnect_interval_min = 500;
   // state
   bool connect_state = false;
-  bool enabled = true;
+  bool connection_stable = false;
+  bool enabled = false;
   bool pending_connect_callback = true;
   bool pending_disconnect_callback = false;
-  unsigned long last_connect_attempt = 0;
+  unsigned long last_connect_time = 0;
+  unsigned long last_send = 0; // used for sending keepalives
+  unsigned long next_connect_time = 0;
   // private methods
   static void taskWrapper(void * pvParameters);
   void connect();
+  void schedule_connect();
   void task();
  public:
-  PacketStream(int rx_buffer_len, int tx_buffer_len);
+  PacketStream(int rx_buffer_len, int tx_buffer_len, int rx_queue_len, int tx_queue_len);
   ~PacketStream();
   // metrics
-  unsigned int rx_buffer_full_errors = 0;
-  unsigned int rx_buffer_high_watermark = 0;
-  unsigned int rx_queue_full_errors = 0;
-  unsigned int rx_queue_high_watermark = 0;
-  unsigned int tcp_connects = 0;
-  unsigned int tcp_fingerprint_errors = 0;
-  unsigned int tcp_sync_errors = 0;
-  unsigned int tx_buffer_full_errors = 0;
-  unsigned int tx_buffer_high_watermark = 0;
-  unsigned int tx_queue_full_errors = 0;
-  unsigned int tx_queue_high_watermark = 0;
-  unsigned long rx_queue_count = 0;
+  unsigned long rx_buffer_full = 0;
+  unsigned long rx_buffer_max = 0;
+  unsigned long rx_queue_full = 0;
+  unsigned long rx_queue_in = 0;
+  unsigned long rx_queue_max = 0; // high watermark for rx_queue
+  unsigned long rx_queue_out = 0; // messages dequeued
   unsigned long tcp_bytes_received = 0;
   unsigned long tcp_bytes_sent = 0;
-  unsigned long tx_queue_count = 0;
+  unsigned long tcp_conn_errors = 0; // connections that failed immediately
+  unsigned long tcp_conn_fingerprint_errors = 0; // connections that failed TLS fingerprint check
+  unsigned long tcp_conn_ok = 0; // successful TCP connections
+  unsigned long tx_buffer_full = 0;
+  unsigned long tx_buffer_max = 0;
+  unsigned long tx_queue_full = 0; // queue-full errors via send()
+  unsigned long tx_queue_in = 0; // successfully queued messages via send()
+  unsigned long tx_queue_max = 0; // high watermark for tx_queue
+  unsigned long tx_queue_out = 0; // messages dequeued
   // public methods
+  void setConnectionStableTime(unsigned long ms);
   void setDebug(bool enable);
+  void setKeepalive(unsigned long ms);
+  void setReconnectMaxTime(unsigned long ms);
   void setServer(const char *host, int port,
                  bool verify=false,
                  const char *fingerprint1=NULL,

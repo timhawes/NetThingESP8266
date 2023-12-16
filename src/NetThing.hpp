@@ -10,6 +10,11 @@
 #include "SPIFFS.h"
 #include "PacketStream.hpp"
 #include "TimeLib.h"
+#include "LoopWatchdog.hpp"
+
+#define df2xstr(s) #s
+#define df2str(s) df2xstr(s)
+#define ESP_ARDUINO_VERSION_STR df2str(ESP_ARDUINO_VERSION_MAJOR) "." df2str(ESP_ARDUINO_VERSION_MINOR) "." df2str(ESP_ARDUINO_VERSION_PATCH)
 
 typedef std::function<void()> NetThingConnectHandler;
 typedef std::function<void()> NetThingDisconnectHandler;
@@ -27,27 +32,32 @@ class NetThing {
   PacketStream *ps;
   FirmwareWriter *firmware_writer;
   FileWriter *file_writer;
+  LoopWatchdog loopwatchdog;
   // configuration
   char mac_address[13] = "";
   const char *cmd_key = "cmd";
   const char *server_username;
   const char *server_password;
-  unsigned int watchdog_timeout = 0;
+  const char *filename_prefix = "/";
+  unsigned long receive_watchdog_timeout = 0; // restart if no packet received for this ms period
+  unsigned long loop_watchdog_timeout = 60000; // restart if loop() not called for this ms period
   bool debug_json = false;
-  bool allow_firmware_sync = false;
-  bool allow_file_sync = false;
+  bool allow_firmware_sync = true;
+  bool allow_file_sync = true;
   // state
   bool enabled = false;
   unsigned long last_packet_received = 0;
   bool restarted = true; // the system has been restarted, will be set to false when it has been logged
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
+  time_t boot_time = 0;
   // metrics
   unsigned int json_parse_max_usage = 0;
   unsigned long json_parse_errors = 0;
   unsigned long json_parse_ok = 0;
   unsigned long wifi_reconnections = 0;
   // private methods
+  String canonifyFilename(String filename);
   void psConnectHandler();
   void psDisconnectHandler();
   void psReceiveHandler(uint8_t* packet, size_t packet_len);
@@ -71,7 +81,7 @@ class NetThing {
   void cmdTime(const JsonDocument &doc);
   void sendFileInfo(const char *filename);
  public:
-  NetThing();
+  NetThing(int rx_buffer_len=1500, int tx_buffer_len=1500, int rx_queue_len=20, int tx_queue_len=20);
   void loop();
   void onConnect(NetThingConnectHandler callback);
   void onDisconnect(NetThingDisconnectHandler callback);
@@ -85,12 +95,17 @@ class NetThing {
   void setCred(const char *username, const char *password);
   void setCred(const char *password);
   void setCommandKey(const char *key);
+  void setConnectionStableTime(unsigned long ms);
   void setDebug(bool enabled);
+  void setKeepalive(unsigned long ms);
+  void setReconnectMaxTime(unsigned long ms);
+  void setFilenamePrefix(const char *prefix);
   void setServer(const char *host, int port,
                  bool tls=true, bool verify=false,
                  const char *fingerprint1=NULL,
                  const char *fingerprint2=NULL);
-  void setWatchdog(unsigned int timeout);
+  void setReceiveWatchdog(unsigned long timeout);
+  void setLoopWatchdog(unsigned long timeout);
   void setWiFi(const char *ssid, const char *password);
   void start();
   void stop();

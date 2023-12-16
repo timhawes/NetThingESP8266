@@ -3,7 +3,24 @@
 
 using namespace std::placeholders;
 
-NetThing::NetThing()
+const char* reset_reason_name(esp_reset_reason_t reason) {
+  switch (reason) {
+    case ESP_RST_UNKNOWN: return "ESP_RST_UNKNOWN";
+    case ESP_RST_POWERON: return "ESP_RST_POWERON";
+    case ESP_RST_EXT: return "ESP_RST_EXT";
+    case ESP_RST_SW: return "ESP_RST_SW";
+    case ESP_RST_PANIC: return "ESP_RST_PANIC";
+    case ESP_RST_INT_WDT: return "ESP_RST_INT_WDT";
+    case ESP_RST_TASK_WDT: return "ESP_RST_TASK_WDT";
+    case ESP_RST_WDT: return "ESP_RST_WDT";
+    case ESP_RST_DEEPSLEEP: return "ESP_RST_DEEPSLEEP";
+    case ESP_RST_BROWNOUT: return "ESP_RST_BROWNOUT";
+    case ESP_RST_SDIO: return "ESP_RST_SDIO";
+    default: return "";
+  }
+}
+
+NetThing::NetThing(int rx_buffer_len, int tx_buffer_len, int rx_queue_len, int tx_queue_len)
 {
   uint8_t m[6] = {};
   esp_efuse_mac_get_default(m);
@@ -15,7 +32,7 @@ NetThing::NetThing()
   WiFi.onEvent(std::bind(&NetThing::wifiConnectHandler, this), WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_GOT_IP);
   WiFi.onEvent(std::bind(&NetThing::wifiDisconnectHandler, this), WiFiEvent_t::ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
 
-  ps = new PacketStream(1500, 1500);
+  ps = new PacketStream(rx_buffer_len, tx_buffer_len, rx_queue_len, tx_queue_len);
   ps->onConnect(std::bind(&NetThing::psConnectHandler, this));
   ps->onDisconnect(std::bind(&NetThing::psDisconnectHandler, this));
   ps->onReceivePacket(std::bind(&NetThing::psReceiveHandler, this, _1, _2));
@@ -24,12 +41,30 @@ NetThing::NetThing()
   firmware_writer = new FirmwareWriter;
 }
 
+String NetThing::canonifyFilename(String filename) {
+  if (filename[0] == '/') {
+    // absolute filename, no change
+    return filename;
+  } else if (filename_prefix) {
+    // rewrite
+    return filename_prefix + filename;
+  } else {
+    // no prefix configured
+    return filename;
+  }
+}
+
 void NetThing::psConnectHandler() {
-  StaticJsonDocument<JSON_OBJECT_SIZE(4) + 128> doc;
+  StaticJsonDocument<JSON_OBJECT_SIZE(7) + 128> doc;
   doc[cmd_key] = "hello";
   doc["clientid"] = server_username;
   doc["username"] = server_username;
   doc["password"] = server_password;
+  doc["esp_efuse_mac"] = mac_address;
+  doc["esp_sketch_md5"] = ESP.getSketchMD5();
+#ifdef ARDUINO_VARIANT
+  doc["arduino_variant"] = ARDUINO_VARIANT;
+#endif
   sendJson(doc);
   if (connect_callback) {
     connect_callback();
@@ -45,6 +80,8 @@ void NetThing::psDisconnectHandler() {
 }
 
 void NetThing::loop() {
+  loopwatchdog.feed();
+
   ps->loop();
 
   if (restart_needed) {
@@ -80,9 +117,9 @@ void NetThing::loop() {
     }
   }
 
-  if (watchdog_timeout > 0) {
-    if (millis() - last_packet_received > watchdog_timeout) {
-      Serial.println("NetThing: watchdog triggered, restarting");
+  if (receive_watchdog_timeout > 0) {
+    if ((long)(millis() - last_packet_received) > receive_watchdog_timeout) {
+      Serial.println("NetThing: receive watchdog triggered, restarting");
       if (restart_callback) {
         // main application may restart if convenient
         restart_callback(false, restart_firmware);
@@ -157,6 +194,22 @@ void NetThing::setDebug(bool enabled) {
   debug_json = enabled;
 }
 
+void NetThing::setKeepalive(unsigned long ms) {
+  ps->setKeepalive(ms);
+}
+
+void NetThing::setConnectionStableTime(unsigned long ms) {
+  ps->setConnectionStableTime(ms);
+}
+
+void NetThing::setFilenamePrefix(const char *prefix) {
+  filename_prefix = prefix;
+}
+
+void NetThing::setReconnectMaxTime(unsigned long ms) {
+  ps->setReconnectMaxTime(ms);
+}
+
 void NetThing::setServer(const char *host, int port,
                          bool tls, bool verify,
                          const char *fingerprint1,
@@ -164,8 +217,12 @@ void NetThing::setServer(const char *host, int port,
   ps->setServer(host, port, verify, fingerprint1, fingerprint2);
 }
 
-void NetThing::setWatchdog(unsigned int timeout) {
-  watchdog_timeout = timeout;
+void NetThing::setReceiveWatchdog(unsigned long timeout) {
+  receive_watchdog_timeout = timeout;
+}
+
+void NetThing::setLoopWatchdog(unsigned long timeout) {
+  loopwatchdog.setTimeout(timeout);
 }
 
 void NetThing::setWiFi(const char *ssid, const char *password) {
@@ -182,6 +239,7 @@ void NetThing::start() {
 
 void NetThing::stop() {
   ps->stop();
+  loopwatchdog.stop();
 }
 
 void NetThing::wifiConnectHandler() {
@@ -195,11 +253,13 @@ void NetThing::wifiDisconnectHandler() {
 
 void NetThing::sendFileInfo(const char *filename)
 {
-  StaticJsonDocument<JSON_OBJECT_SIZE(4) + 64> obj;
+  StaticJsonDocument<JSON_OBJECT_SIZE(5) + 64> obj;
+  String path = canonifyFilename(filename);
   obj[cmd_key] = "file_info";
   obj["filename"] = filename;
+  obj["local_filename"] = path;
 
-  File f = SPIFFS.open(String("/") + filename, "r");
+  File f = SPIFFS.open(path, "r");
   if (f) {
     MD5Builder md5;
     md5.begin();
@@ -292,7 +352,8 @@ void NetThing::cmdFileData(const JsonDocument &obj)
         sendJson(reply);
         sendFileInfo(obj["filename"]);
         if (transfer_status_callback) {
-          transfer_status_callback(obj["filename"], 100, false, true);
+          String path = canonifyFilename(obj["filename"]);
+          transfer_status_callback(path.c_str(), 100, false, true);
         }
       } else {
         // finished but commit failed
@@ -323,7 +384,9 @@ void NetThing::cmdFileDelete(const JsonDocument &obj)
 {
   StaticJsonDocument<JSON_OBJECT_SIZE(3)> reply;
 
-  if (SPIFFS.remove((const char*)obj["filename"])) {
+  String path = canonifyFilename(obj["filename"]);
+
+  if (SPIFFS.remove(path)) {
     reply[cmd_key] = "file_delete_ok";
     reply["filename"] = obj["filename"];
     sendJson(reply);
@@ -338,19 +401,20 @@ void NetThing::cmdFileDelete(const JsonDocument &obj)
 void NetThing::cmdFileDirQuery(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(1024);
-  JsonArray files = reply.createNestedArray("filenames");
+  JsonArray dirs = reply.createNestedArray("dirs");
+  JsonArray files = reply.createNestedArray("files");
   reply[cmd_key] = "file_dir_info";
   reply["path"] = obj["path"];
-  if (SPIFFS.exists((const char*)obj["path"])) {
-    File dir = SPIFFS.open((const char*)obj["path"]);
-    File file = dir.openNextFile();
-    while (file) {
-      files.add(file.name());
-      file = dir.openNextFile();
+  File dir = SPIFFS.open((const char*)obj["path"]);
+  File file;
+  while (file = dir.openNextFile()) {
+    if (file.isDirectory()) {
+      dirs.add((char*)(file.path()));
+    } else {
+      files.add((char*)(file.path()));
     }
-  } else {
-    reply["filenames"] = (char*)NULL;
   }
+  reply.shrinkToFit();
   sendJson(reply);
 }
 
@@ -363,7 +427,10 @@ void NetThing::cmdFileRename(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(512);
 
-  if (SPIFFS.rename((const char*)obj["old_filename"], (const char*)obj["new_filename"])) {
+  String old_path = canonifyFilename(obj["old_filename"]);
+  String new_path = canonifyFilename(obj["new_filename"]);
+
+  if (SPIFFS.rename(old_path, new_path)) {
     reply[cmd_key] = "file_rename_ok";
     reply["old_filename"] = obj["old_filename"];
     reply["new_filename"] = obj["new_filename"];
@@ -381,7 +448,7 @@ void NetThing::cmdFileWrite(const JsonDocument &obj)
 {
   DynamicJsonDocument reply(512);
 
-  String path = "/" + obj["filename"].as<String>();
+  String path = canonifyFilename(obj["filename"]);
 
   if (file_writer->begin(path.c_str(), obj["md5"], obj["size"])) {
     if (file_writer->upToDate()) {
@@ -502,35 +569,39 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   DynamicJsonDocument reply(1024);
   reply[cmd_key] = "net_metrics_info";
   reply["esp_free_heap"] = ESP.getFreeHeap();
-  reply["esp_min_free_heap"] = ESP.getMinFreeHeap();
-  reply["esp_max_alloc_heap"] = ESP.getMaxAllocHeap();
   reply["esp_free_psram"] = ESP.getFreePsram();
-  reply["esp_min_free_psram"] = ESP.getMinFreePsram();
+  reply["esp_max_alloc_heap"] = ESP.getMaxAllocHeap();
   reply["esp_max_alloc_psram"] = ESP.getMaxAllocPsram();
+  reply["esp_min_free_heap"] = ESP.getMinFreeHeap();
+  reply["esp_min_free_psram"] = ESP.getMinFreePsram();
   reply["millis"] = millis();
-  if (timeStatus() != timeNotSet) {
-    reply["time"] = now();
-  }
-  reply["rx_buffer_full_errors"] = ps->rx_buffer_full_errors;
-  reply["rx_buffer_high_watermark"] = ps->rx_buffer_high_watermark;
-  reply["rx_queue_full_errors"] = ps->rx_queue_full_errors;
-  reply["rx_queue_high_watermark"] = ps->rx_queue_high_watermark;
-  reply["tcp_connects"] = ps->tcp_connects;
-  reply["tcp_fingerprint_errors"] = ps->tcp_fingerprint_errors;
-  reply["tcp_sync_errors"] = ps->tcp_sync_errors;
-  reply["tx_buffer_full_errors"] = ps->tx_buffer_full_errors;
-  reply["tx_buffer_high_watermark"] = ps->tx_buffer_high_watermark;
-  reply["tx_queue_full_errors"] = ps->tx_queue_full_errors;
-  reply["tx_queue_high_watermark"] = ps->tx_queue_high_watermark;
-  reply["rx_queue_count"] = ps->rx_queue_count;
-  reply["tcp_bytes_received"] = ps->tcp_bytes_received;
-  reply["tcp_bytes_sent"] = ps->tcp_bytes_sent;
-  reply["tx_queue_count"] = ps->tx_queue_count;
   reply["net_json_parse_errors"] = json_parse_errors;
-  reply["net_json_parse_ok"] = json_parse_ok;
   reply["net_json_parse_max_usage"] = json_parse_max_usage;
+  reply["net_json_parse_ok"] = json_parse_ok;
   reply["net_wifi_reconns"] = wifi_reconnections;
   reply["net_wifi_rssi"] = WiFi.RSSI();
+  reply["rx_buffer_full"] = ps->rx_buffer_full;
+  reply["rx_buffer_max"] = ps->rx_buffer_max;
+  reply["rx_queue_full"] = ps->rx_queue_full;
+  reply["rx_queue_in"] = ps->rx_queue_in;
+  reply["rx_queue_max"] = ps->rx_queue_max;
+  reply["rx_queue_out"] = ps->rx_queue_out;
+  reply["tcp_bytes_received"] = ps->tcp_bytes_received;
+  reply["tcp_bytes_sent"] = ps->tcp_bytes_sent;
+  reply["tcp_conn_errors"] = ps->tcp_conn_errors;
+  reply["tcp_conn_fingerprint_errors"] = ps->tcp_conn_fingerprint_errors;
+  reply["tcp_conn_ok"] = ps->tcp_conn_ok;
+  reply["tx_buffer_full"] = ps->tx_buffer_full;
+  reply["tx_buffer_max"] = ps->tx_buffer_max;
+  reply["tx_queue_full"] = ps->tx_queue_full;
+  reply["tx_queue_in"] = ps->tx_queue_in;
+  reply["tx_queue_max"] = ps->tx_queue_max;
+  reply["tx_queue_out"] = ps->tx_queue_out;
+  if (timeStatus() != timeNotSet) {
+    reply["boot_time"] = boot_time;
+    reply["time"] = now();
+    reply["uptime"] = now() - boot_time;
+  }
   reply.shrinkToFit();
   sendJson(reply);
 }
@@ -570,26 +641,35 @@ void NetThing::cmdRestart(const JsonDocument &doc) {
 void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   DynamicJsonDocument reply(1024);
   reply[cmd_key] = "system_info";
-  reply["esp_heap_size"] = ESP.getHeapSize();
-  reply["esp_psram_size"] = ESP.getPsramSize();
-  reply["esp_chip_revision"] = ESP.getChipRevision();
-  reply["esp_chip_model"] = ESP.getChipModel();
+#ifdef ARDUINO_VARIANT
+  reply["arduino_variant"] = ARDUINO_VARIANT;
+#endif
   reply["esp_chip_cores"] = ESP.getChipCores();
-  reply["esp_sdk_version"] = ESP.getSdkVersion();
+  reply["esp_chip_model"] = ESP.getChipModel();
+  reply["esp_chip_revision"] = ESP.getChipRevision();
   reply["esp_cpu_freq_mhz"] = ESP.getCpuFreqMHz();
-  reply["esp_flash_chip_size"] = ESP.getFlashChipSize();
-  reply["esp_flash_chip_speed"] = ESP.getFlashChipSpeed();
-  reply["esp_flash_chip_mode"] = ESP.getFlashChipMode();
-  reply["esp_sketch_size"] = ESP.getSketchSize();
-  reply["esp_sketch_md5"] = ESP.getSketchMD5();
-  reply["esp_free_sketch_space"] = ESP.getFreeSketchSpace();
   reply["esp_cycle_count"] = ESP.getCycleCount();
   reply["esp_efuse_mac"] = mac_address;
+  reply["esp_flash_chip_mode"] = ESP.getFlashChipMode();
+  reply["esp_flash_chip_size"] = ESP.getFlashChipSize();
+  reply["esp_flash_chip_speed"] = ESP.getFlashChipSpeed();
+  reply["esp_free_sketch_space"] = ESP.getFreeSketchSpace();
+  reply["esp_heap_size"] = ESP.getHeapSize();
+  reply["esp_psram_size"] = ESP.getPsramSize();
+  reply["esp_reset_reason"] = reset_reason_name(esp_reset_reason());
+  reply["esp_sdk_version"] = ESP.getSdkVersion();
+  reply["esp_sketch_md5"] = ESP.getSketchMD5();
+  reply["esp_sketch_size"] = ESP.getSketchSize();
   reply["fs_total_bytes"] = SPIFFS.totalBytes();
   reply["fs_used_bytes"] = SPIFFS.usedBytes();
   reply["millis"] = millis();
   if (timeStatus() != timeNotSet) {
+    reply["boot_time"] = boot_time;
     reply["time"] = now();
+    reply["uptime"] = now() - boot_time;
+  }
+  if (loopwatchdog.restarted()) {
+    reply["net_reset_info"] = "loop() watchdog timeout";
   }
   if (restarted) {
     reply["restarted"] = true;
@@ -602,6 +682,9 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
 void NetThing::cmdTime(const JsonDocument &doc) {
   if (doc["time"] > 0) {
     setTime(doc["time"]);
+    if (boot_time == 0) {
+      boot_time = now() - (millis() / 1000);
+    }
   }
 }
 

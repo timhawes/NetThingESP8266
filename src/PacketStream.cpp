@@ -1,12 +1,11 @@
 #include "PacketStream.hpp"
 
-PacketStream::PacketStream(int rx_buffer_len, int tx_buffer_len):
+PacketStream::PacketStream(int rx_buffer_len, int tx_buffer_len, int rx_queue_len, int tx_queue_len):
   rx_buffer(rx_buffer_len),
   tx_buffer(tx_buffer_len)
 {
-  rx_queue = xQueueCreate(20, sizeof(asyncsession_packet_t));
-  tx_queue = xQueueCreate(20, sizeof(asyncsession_packet_t));
-  last_connect_attempt = millis() - reconnect_interval;
+  rx_queue = xQueueCreate(rx_queue_len, sizeof(asyncsession_packet_t));
+  tx_queue = xQueueCreate(tx_queue_len, sizeof(asyncsession_packet_t));
 }
 
 PacketStream::~PacketStream() {
@@ -14,9 +13,6 @@ PacketStream::~PacketStream() {
 }
 
 void PacketStream::begin() {
-  if ((signed)1 > (unsigned)tx_buffer_high_watermark) {
-    Serial.println();
-  }
   xTaskCreate(
     taskWrapper, /* Task function. */
     "PacketStream", /* name of task. */
@@ -34,6 +30,18 @@ void PacketStream::taskWrapper(void * pvParameters) {
 
 void PacketStream::setDebug(bool enable) {
   debug = enable;
+}
+
+void PacketStream::setConnectionStableTime(unsigned long ms) {
+  connection_stable_time = ms;
+}
+
+void PacketStream::setKeepalive(unsigned long ms) {
+  keepalive_interval = ms;
+}
+
+void PacketStream::setReconnectMaxTime(unsigned long ms) {
+  reconnect_interval_max = ms;
 }
 
 void PacketStream::setServer(const char *host, int port,
@@ -71,7 +79,8 @@ void PacketStream::connect() {
     char error[64];
     int err = client.lastError(error, sizeof(64));
     Serial.printf("PacketStream: connect failed %d %s\n", err, error);
-    tcp_sync_errors++;
+    tcp_conn_errors++;
+    schedule_connect();
     return;
   }
 
@@ -87,7 +96,7 @@ void PacketStream::connect() {
     }
     if (!matched) {
       Serial.println("PacketStream: TLS fingerprint doesn't match, disconnecting");
-      tcp_fingerprint_errors++;
+      tcp_conn_fingerprint_errors++;
       client.stop();
       return;
     }
@@ -95,22 +104,43 @@ void PacketStream::connect() {
     Serial.println("PacketStream: TLS fingerprint not verified, continuing");
   }
 
-  tcp_connects++;
+  tcp_conn_ok++;
   client.setTimeout(0);
   rx_buffer.flush();
   tx_buffer.flush();
+  xQueueReset(rx_queue);
+  xQueueReset(tx_queue);
+  last_connect_time = millis();
+  last_send = millis();
+  connection_stable = false;
   connect_state = true;
   Serial.println("PacketStream: connection ready");
   pending_connect_callback = true;
 }
 
+void PacketStream::schedule_connect() {
+  unsigned long splayed_reconnect_interval = random(0, reconnect_interval);
+  Serial.print("PacketStream: reconnecting in ");
+  Serial.print(splayed_reconnect_interval, DEC);
+  Serial.println("ms");
+  next_connect_time = millis() + splayed_reconnect_interval;
+
+  reconnect_interval = reconnect_interval * reconnect_interval_backoff_factor;
+  if (reconnect_interval > reconnect_interval_max) {
+    reconnect_interval = reconnect_interval_max;
+  }
+}
+
 void PacketStream::reconnect() {
+  reconnect_interval = reconnect_interval_min;
+  next_connect_time = millis() + reconnect_interval;
   client.stop();
 }
 
 void PacketStream::start() {
+  reconnect_interval = reconnect_interval_min;
+  next_connect_time = millis();
   enabled = true;
-  last_connect_attempt = millis() - reconnect_interval;
 }
 
 void PacketStream::stop() {
@@ -121,7 +151,6 @@ void PacketStream::stop() {
 // loop is called periodically from the main thread
 void PacketStream::loop() {
   if (pending_connect_callback) {
-    Serial.println("PacketStream: running connect callback");
     if (connect_callback) {
       connect_callback();
     }
@@ -129,7 +158,6 @@ void PacketStream::loop() {
   }
 
   if (pending_disconnect_callback) {
-    Serial.println("PacketStream: running disconnect callback");
     if (disconnect_callback) {
       disconnect_callback();
     }
@@ -140,7 +168,6 @@ void PacketStream::loop() {
     uint8_t packet[1500];
     size_t len = receive(packet, sizeof(packet));
     while (len > 0) {
-      // Serial.println("PacketStream: received packet, calling callback");
       receivepacket_callback(packet, len);
       len = receive(packet, sizeof(packet));
     }
@@ -153,37 +180,51 @@ void PacketStream::task() {
 
     if (client.connected()) {
 
+      // mark connection as stable
+      if (!connection_stable) {
+        if (millis() - last_connect_time > connection_stable_time) {
+          reconnect_interval = reconnect_interval_min;
+          connection_stable = true;
+          if (debug) Serial.println("PacketStream: connection stable");
+        }
+      }
+
       // receive bytes
       while (rx_buffer.room() && client.available()) {
         rx_buffer.write(client.read());
         tcp_bytes_received++;
       }
-      if (rx_buffer.available() > rx_buffer_high_watermark) {
-        rx_buffer_high_watermark = rx_buffer.available();
+      if (rx_buffer.available() > rx_buffer_max) {
+        rx_buffer_max = rx_buffer.available();
       }
 
       // process rx cbuf into packets
-      // if (debug_task) Serial.printf("PacketStream::task: rx_buffer.available = %u\n", rx_buffer.available());
-      if (rx_buffer.available() > 2) {
+      if (rx_buffer.available() >= 2) {
         char peekbuf[2];
         rx_buffer.peek(peekbuf, 2);
         uint16_t length = (peekbuf[0] << 8) | peekbuf[1];
-        // if (debug_task) Serial.printf("PacketStream::task: length header = %d\n", length);
-        if (rx_buffer.available() >= length + 2) {
-          uint8_t *data = new uint8_t[length];
+        if (length == 0) {
+          if (debug) Serial.println("PacketStream: keepalive packet received");
           rx_buffer.remove(2);
-          rx_buffer.read((char*)data, length);
+        } else {
+          if (rx_buffer.available() >= length + 2) {
+            // FIXME: check if space is available in rx_queue before removing from rx_buffer
+            uint8_t *data = new uint8_t[length];
+            rx_buffer.remove(2);
+            rx_buffer.read((char*)data, length);
 
-          asyncsession_packet_t packet;
-          packet.data = data;
-          packet.len = length;
-          if (xQueueSend(rx_queue, &packet, 0)) {
-            int messages_in_rx_queue = uxQueueMessagesWaiting(rx_queue);
-            if (messages_in_rx_queue > rx_queue_high_watermark) {
-              rx_queue_high_watermark = messages_in_rx_queue;
+            asyncsession_packet_t packet;
+            packet.data = data;
+            packet.len = length;
+            if (xQueueSend(rx_queue, &packet, 0)) {
+              rx_queue_in++;
+              int messages_in_rx_queue = uxQueueMessagesWaiting(rx_queue);
+              if (messages_in_rx_queue > rx_queue_max) {
+                rx_queue_max = messages_in_rx_queue;
+              }
+            } else {
+              rx_queue_full++;
             }
-          } else {
-            rx_queue_full_errors++;
           }
         }
       }
@@ -203,23 +244,32 @@ void PacketStream::task() {
           }
         }
         xQueueReceive(tx_queue, &packet, 0);
-        tx_queue_count++;
+        last_send = millis();
+        tx_queue_out++;
         delete packet.data;
       }
 
-      // if (debug_task) Serial.printf("PacketStream::task: tx_buffer.available() = %u\n", tx_buffer.available());
+      // send keepalive packets
+      if (keepalive_interval > 0 && (long)(millis() - last_send) > keepalive_interval) {
+        if (tx_buffer.room() >= 2) {
+          Serial.println("PacketStream: sending keepalive packet");
+          tx_buffer.write(0);
+          tx_buffer.write(0);
+          last_send = millis();
+        }
+      }
 
       // tx bytes from cbuf
       size_t available = tx_buffer.available();
-      if (available > tx_buffer_high_watermark) {
-        tx_buffer_high_watermark = available;
+      if (available > tx_buffer_max) {
+        tx_buffer_max = available;
       }
       if (available > 0) {
         uint8_t *out = new uint8_t[available];
         tx_buffer.read((char*)out, available);
         size_t sent;
         sent = client.write(out, available);
-        tcp_bytes_sent++;
+        tcp_bytes_sent += sent;
         // if (debug) {
         //   Serial.printf("PacketStream::task: sent %d bytes\n", sent);
         //   Serial.write(out, sent);
@@ -234,19 +284,18 @@ void PacketStream::task() {
       }
     } else {
       if (connect_state) {
-        // this is where we noticed that the connection has gone
-        Serial.println("PacketStream: disconnect detected");
+        // disconnection detected
         char client_error_text[64];
         int client_error_number = client.lastError(client_error_text, sizeof(client_error_text));
         Serial.printf("PacketStream: disconnected %d %s\n", client_error_number, client_error_text);
         pending_disconnect_callback = true;
         connect_state = false;
+        schedule_connect();
       }
       if (enabled) {
-        if (millis() - last_connect_attempt > reconnect_interval) {
-          last_connect_attempt = millis();
+        if ((long)(millis() - next_connect_time) > 0) {
           connect();
-        }        
+        }
       }
     }
   
@@ -265,13 +314,14 @@ bool PacketStream::send(const uint8_t* data, size_t len) {
   packet.len = len;
 
   if (xQueueSend(tx_queue, &packet, 0)) {
+    tx_queue_in++;
     int messages_in_tx_queue = uxQueueMessagesWaiting(tx_queue);
-    if (messages_in_tx_queue > tx_queue_high_watermark) {
-      tx_queue_high_watermark = messages_in_tx_queue;
+    if (messages_in_tx_queue > tx_queue_max) {
+      tx_queue_max = messages_in_tx_queue;
     }
     return true;
   } else {
-    tx_queue_full_errors++;
+    tx_queue_full++;
     Serial.println("PacketStream: failed to en-queue a packet for tx");
     delete buf;
     return false;
@@ -282,7 +332,7 @@ bool PacketStream::send(const uint8_t* data, size_t len) {
 size_t PacketStream::receive(uint8_t* data, size_t len) {
   asyncsession_packet_t packet;
   if (xQueueReceive(rx_queue, &packet, 0)) {
-    rx_queue_count++;
+    rx_queue_out++;
     if (packet.len > len) {
       // incoming packet is too large
       Serial.println("failed to de-queue a packet for rx (too large for buffer)");
