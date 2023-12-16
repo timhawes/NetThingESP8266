@@ -648,6 +648,7 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
   reply["esp_chip_model"] = ESP.getChipModel();
   reply["esp_chip_revision"] = ESP.getChipRevision();
   reply["esp_cpu_freq_mhz"] = ESP.getCpuFreqMHz();
+  reply["esp_core_version"] = ESP_ARDUINO_VERSION_STR;
   reply["esp_cycle_count"] = ESP.getCycleCount();
   reply["esp_efuse_mac"] = mac_address;
   reply["esp_flash_chip_mode"] = ESP.getFlashChipMode();
