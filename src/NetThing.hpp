@@ -102,8 +102,8 @@ class NetThing {
   void setFilenamePrefix(const char *prefix);
   void setServer(const char *host, int port,
                  bool tls=true, bool verify=false,
-                 const char *fingerprint1=NULL,
-                 const char *fingerprint2=NULL);
+                 const char *sha256_fingerprint1=NULL,
+                 const char *sha256_fingerprint2=NULL);
   void setReceiveWatchdog(unsigned long timeout);
   void setLoopWatchdog(unsigned long timeout);
   void setWiFi(const char *ssid, const char *password);

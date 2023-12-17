@@ -19,7 +19,8 @@ typedef struct
 class PacketStream {
 
  private:
-  WiFiClientSecure client;
+  WiFiClient client_plain;
+  WiFiClientSecure client_tls;
   QueueHandle_t rx_queue;
   QueueHandle_t tx_queue;
   cbuf rx_buffer;
@@ -29,9 +30,10 @@ class PacketStream {
   PacketStreamReceivePacketHandler receivepacket_callback;
   // configuration
   bool debug = false;
-  bool server_verify;
-  const char *server_fingerprint1;
-  const char *server_fingerprint2;
+  bool server_tls = false;
+  bool server_verify = false;
+  const char *server_sha256_fingerprint1;
+  const char *server_sha256_fingerprint2;
   const char *server_host;
   int server_port;
   unsigned int keepalive_interval = 0;
@@ -46,6 +48,7 @@ class PacketStream {
   bool enabled = false;
   bool pending_connect_callback = false;
   bool pending_disconnect_callback = false;
+  bool current_tls_mode = false;
   unsigned long last_connect_time = 0;
   unsigned long last_send = 0; // used for sending keepalives
   unsigned long next_connect_time = 0;
@@ -81,9 +84,9 @@ class PacketStream {
   void setKeepalive(unsigned long ms);
   void setReconnectMaxTime(unsigned long ms);
   void setServer(const char *host, int port,
-                 bool verify=false,
-                 const char *fingerprint1=NULL,
-                 const char *fingerprint2=NULL);
+                 bool tls=false, bool verify=false,
+                 const char *sha256_fingerprint1=NULL,
+                 const char *sha256_fingerprint2=NULL);
   void onConnect(PacketStreamConnectHandler callback);
   void onDisconnect(PacketStreamDisconnectHandler callback);
   void onReceivePacket(PacketStreamReceivePacketHandler callback);

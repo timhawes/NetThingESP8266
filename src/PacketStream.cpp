@@ -45,14 +45,16 @@ void PacketStream::setReconnectMaxTime(unsigned long ms) {
 }
 
 void PacketStream::setServer(const char *host, int port,
-                             bool verify,
-                             const char *fingerprint1,
-                             const char *fingerprint2) {
+                             bool tls, bool verify,
+                             const char *sha256_fingerprint1,
+                             const char *sha256_fingerprint2) {
+  
   server_host = host;
   server_port = port;
+  server_tls = tls;
   server_verify = verify;
-  server_fingerprint1 = fingerprint1;
-  server_fingerprint2 = fingerprint2;
+  server_sha256_fingerprint1 = sha256_fingerprint1;
+  server_sha256_fingerprint2 = sha256_fingerprint2;
 }
 
 void PacketStream::onConnect(PacketStreamConnectHandler callback) {
@@ -71,41 +73,58 @@ void PacketStream::onReceivePacket(PacketStreamReceivePacketHandler callback) {
 void PacketStream::connect() {
   Serial.println("PacketStream: connecting");
 
-  client.setTimeout(10);
-  client.setInsecure();
-  int status = client.connect(server_host, server_port);
-
-  if (!status) {
-    char error[64];
-    int err = client.lastError(error, sizeof(64));
-    Serial.printf("PacketStream: connect failed %d %s\n", err, error);
-    tcp_conn_errors++;
-    schedule_connect();
-    return;
-  }
-
-  if (server_verify) {
-    bool matched = false;
-    if (server_fingerprint1 && client.verify(server_fingerprint1, NULL)) {
-      Serial.println("PacketStream: TLS fingerprint #1 matched");
-      matched = true;
-    }
-    if (server_fingerprint2 && client.verify(server_fingerprint2, NULL)) {
-      Serial.println("PacketStream: TLS fingerprint #2 matched");
-      matched = true;
-    }
-    if (!matched) {
-      Serial.println("PacketStream: TLS fingerprint doesn't match, disconnecting");
-      tcp_conn_fingerprint_errors++;
-      client.stop();
+  if (server_tls) {
+    current_tls_mode = true;
+    client_tls.setTimeout(10);
+    client_tls.setInsecure();
+    int status = client_tls.connect(server_host, server_port);
+    
+    if (!status) {
+      char error[64];
+      int err = client_tls.lastError(error, sizeof(64));
+      Serial.printf("PacketStream: connect failed %d %s\r\n", err, error);
+      tcp_conn_errors++;
+      schedule_connect();
       return;
     }
+
+    if (server_verify) {
+      bool matched = false;
+      if (server_sha256_fingerprint1 && client_tls.verify(server_sha256_fingerprint1, NULL)) {
+        Serial.println("PacketStream: TLS fingerprint #1 matched");
+        matched = true;
+      }
+      if (server_sha256_fingerprint2 && client_tls.verify(server_sha256_fingerprint2, NULL)) {
+        Serial.println("PacketStream: TLS fingerprint #2 matched");
+        matched = true;
+      }
+      if (!matched) {
+        Serial.println("PacketStream: TLS fingerprint doesn't match, disconnecting");
+        tcp_conn_fingerprint_errors++;
+        client_tls.stop();
+        return;
+      }
+    } else {
+      Serial.println("PacketStream: TLS fingerprint not verified, continuing");
+    }
+
+    client_tls.setTimeout(0);
   } else {
-    Serial.println("PacketStream: TLS fingerprint not verified, continuing");
+    current_tls_mode = false;
+    client_plain.setTimeout(10);
+    int status = client_plain.connect(server_host, server_port);
+    
+    if (!status) {
+      Serial.printf("PacketStream: connect failed\r\n");
+      tcp_conn_errors++;
+      schedule_connect();
+      return;
+    }
+
+    client_plain.setTimeout(0);
   }
 
   tcp_conn_ok++;
-  client.setTimeout(0);
   rx_buffer.flush();
   tx_buffer.flush();
   xQueueReset(rx_queue);
@@ -134,7 +153,8 @@ void PacketStream::schedule_connect() {
 void PacketStream::reconnect() {
   reconnect_interval = reconnect_interval_min;
   next_connect_time = millis() + reconnect_interval;
-  client.stop();
+  client_plain.stop();
+  client_tls.stop();
 }
 
 void PacketStream::start() {
@@ -145,7 +165,8 @@ void PacketStream::start() {
 
 void PacketStream::stop() {
   enabled = false;
-  client.stop();
+  client_plain.stop();
+  client_tls.stop();
 }
 
 // loop is called periodically from the main thread
@@ -178,7 +199,14 @@ void PacketStream::loop() {
 void PacketStream::task() {
   while (1) {
 
-    if (client.connected()) {
+    uint8_t connected = false;
+    if (current_tls_mode) {
+      connected = client_tls.connected();
+    } else {
+      connected = client_plain.connected();
+    }
+
+    if (connected) {
 
       // mark connection as stable
       if (!connection_stable) {
@@ -190,9 +218,16 @@ void PacketStream::task() {
       }
 
       // receive bytes
-      while (rx_buffer.room() && client.available()) {
-        rx_buffer.write(client.read());
-        tcp_bytes_received++;
+      if (current_tls_mode) {
+        while (rx_buffer.room() && client_tls.available()) {
+          rx_buffer.write(client_tls.read());
+          tcp_bytes_received++;
+        }
+      } else {
+        while (rx_buffer.room() && client_plain.available()) {
+          rx_buffer.write(client_plain.read());
+          tcp_bytes_received++;
+        }
       }
       if (rx_buffer.available() > rx_buffer_max) {
         rx_buffer_max = rx_buffer.available();
@@ -268,10 +303,14 @@ void PacketStream::task() {
         uint8_t *out = new uint8_t[available];
         tx_buffer.read((char*)out, available);
         size_t sent;
-        sent = client.write(out, available);
+        if (current_tls_mode) {
+          sent = client_tls.write(out, available);
+        } else {
+          sent = client_plain.write(out, available);
+        }
         tcp_bytes_sent += sent;
         // if (debug) {
-        //   Serial.printf("PacketStream::task: sent %d bytes\n", sent);
+        //   Serial.printf("PacketStream::task: sent %d bytes\r\n", sent);
         //   Serial.write(out, sent);
         // }
         delete[] out;
@@ -280,14 +319,17 @@ void PacketStream::task() {
         } else if (sent != available) {
           Serial.println("PacketStream: send partially failed, error during dequeue, queue may be corrupt");
         }
-        // return sent;
       }
     } else {
       if (connect_state) {
         // disconnection detected
-        char client_error_text[64];
-        int client_error_number = client.lastError(client_error_text, sizeof(client_error_text));
-        Serial.printf("PacketStream: disconnected %d %s\n", client_error_number, client_error_text);
+        if (current_tls_mode) {
+          char client_error_text[64];
+          int client_error_number = client_tls.lastError(client_error_text, sizeof(client_error_text));
+          Serial.printf("PacketStream: disconnected %d %s\r\n", client_error_number, client_error_text);
+        } else {
+          Serial.printf("PacketStream: disconnected\r\n");
+        }
         pending_disconnect_callback = true;
         connect_state = false;
         schedule_connect();

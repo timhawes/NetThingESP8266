@@ -212,9 +212,10 @@ void NetThing::setReconnectMaxTime(unsigned long ms) {
 
 void NetThing::setServer(const char *host, int port,
                          bool tls, bool verify,
-                         const char *fingerprint1,
-                         const char *fingerprint2) {
-  ps->setServer(host, port, verify, fingerprint1, fingerprint2);
+                         const char *sha256_fingerprint1,
+                         const char *sha256_fingerprint2) {
+  ps->setServer(host, port, tls, verify, sha256_fingerprint1, sha256_fingerprint2);
+  ps->reconnect();
 }
 
 void NetThing::setReceiveWatchdog(unsigned long timeout) {
