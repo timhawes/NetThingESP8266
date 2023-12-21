@@ -38,6 +38,7 @@ class PacketStream {
   int server_port;
   unsigned int keepalive_interval = 0;
   unsigned long connection_stable_time = 30000; // connection considered stable after this time
+  unsigned long idle_threshold = 5000;
   unsigned long reconnect_interval = 500; // current reconnect interval
   unsigned long reconnect_interval_backoff_factor = 2;
   unsigned long reconnect_interval_max = 180000;
@@ -50,7 +51,8 @@ class PacketStream {
   bool pending_disconnect_callback = false;
   bool current_tls_mode = false;
   unsigned long last_connect_time = 0;
-  unsigned long last_send = 0; // used for sending keepalives
+  unsigned long last_send = 0; // used for idle detection and sending keepalives
+  unsigned long last_receive = 0; // used for idle detection
   unsigned long next_connect_time = 0;
   // private methods
   static void taskWrapper(void * pvParameters);
@@ -81,6 +83,7 @@ class PacketStream {
   // public methods
   void setConnectionStableTime(unsigned long ms);
   void setDebug(bool enable);
+  void setIdleThreshold(unsigned long ms);
   void setKeepalive(unsigned long ms);
   void setReconnectMaxTime(unsigned long ms);
   void setServer(const char *host, int port,
@@ -97,6 +100,7 @@ class PacketStream {
   size_t receive(uint8_t* data, size_t len);
   void loop();
   void begin();
+  bool idle();
 };
 
 #endif

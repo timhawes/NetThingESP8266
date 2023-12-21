@@ -194,6 +194,10 @@ void NetThing::setDebug(bool enabled) {
   debug_json = enabled;
 }
 
+void NetThing::setIdleThreshold(unsigned long ms) {
+  ps->setIdleThreshold(ms);
+}
+
 void NetThing::setKeepalive(unsigned long ms) {
   ps->setKeepalive(ms);
 }
@@ -691,6 +695,10 @@ void NetThing::cmdTime(const JsonDocument &doc) {
 
 void NetThing::begin() {
   ps->begin();
+}
+
+bool NetThing::idle() {
+  return ps->idle();
 }
 
 void NetThing::psReceiveHandler(uint8_t* packet, size_t packet_len) {

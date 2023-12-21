@@ -36,6 +36,10 @@ void PacketStream::setConnectionStableTime(unsigned long ms) {
   connection_stable_time = ms;
 }
 
+void PacketStream::setIdleThreshold(unsigned long ms) {
+  idle_threshold = ms;
+}
+
 void PacketStream::setKeepalive(unsigned long ms) {
   keepalive_interval = ms;
 }
@@ -131,6 +135,7 @@ void PacketStream::connect() {
   xQueueReset(tx_queue);
   last_connect_time = millis();
   last_send = millis();
+  last_receive = millis();
   connection_stable = false;
   connect_state = true;
   Serial.println("PacketStream: connection ready");
@@ -222,11 +227,13 @@ void PacketStream::task() {
         while (rx_buffer.room() && client_tls.available()) {
           rx_buffer.write(client_tls.read());
           tcp_bytes_received++;
+          last_receive = millis();
         }
       } else {
         while (rx_buffer.room() && client_plain.available()) {
           rx_buffer.write(client_plain.read());
           tcp_bytes_received++;
+          last_receive = millis();
         }
       }
       if (rx_buffer.available() > rx_buffer_max) {
@@ -386,4 +393,16 @@ size_t PacketStream::receive(uint8_t* data, size_t len) {
     return packet.len;
   }
   return 0;
+}
+
+bool PacketStream::idle() {
+  if (connect_state) {
+    if (rx_buffer.available() > 0) return false;
+    if (tx_buffer.available() > 0) return false;
+    if (uxQueueMessagesWaiting(tx_queue) > 0) return false;
+    if (uxQueueMessagesWaiting(rx_queue) > 0) return false;
+    if ((long)(millis() - last_send) < idle_threshold) return false;
+    if ((long)(millis() - last_receive) < idle_threshold) return false;
+  }
+  return true;
 }

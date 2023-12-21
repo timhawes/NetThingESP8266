@@ -97,6 +97,7 @@ class NetThing {
   void setCommandKey(const char *key);
   void setConnectionStableTime(unsigned long ms);
   void setDebug(bool enabled);
+  void setIdleThreshold(unsigned long ms);
   void setKeepalive(unsigned long ms);
   void setReconnectMaxTime(unsigned long ms);
   void setFilenamePrefix(const char *prefix);
@@ -112,6 +113,7 @@ class NetThing {
   void sendEvent(const char* event, const char* message=NULL);
   void sendEvent(const char* event, size_t size, const char* format, ...);
   void begin();
+  bool idle();
 };
 
 #endif
