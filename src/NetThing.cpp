@@ -215,7 +215,6 @@ void NetThing::setServer(const char *host, int port,
                          const char *sha256_fingerprint1,
                          const char *sha256_fingerprint2) {
   ps->setServer(host, port, tls, verify, sha256_fingerprint1, sha256_fingerprint2);
-  ps->reconnect();
 }
 
 void NetThing::setReceiveWatchdog(unsigned long timeout) {
