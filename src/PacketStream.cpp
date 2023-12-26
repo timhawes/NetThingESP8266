@@ -1,4 +1,5 @@
 #include "PacketStream.hpp"
+#include "esp_task_wdt.h"
 
 PacketStream::PacketStream(int rx_buffer_len, int tx_buffer_len, int rx_queue_len, int tx_queue_len):
   rx_buffer(rx_buffer_len),
@@ -202,7 +203,14 @@ void PacketStream::loop() {
 
 // task is called from a dedicated thread
 void PacketStream::task() {
+  esp_err_t err = esp_task_wdt_add(NULL);
+  if (err != ESP_OK) {
+    Serial.println("PacketStream: failed to configure task watchdog");
+  }
+
   while (1) {
+
+    esp_task_wdt_reset();
 
     uint8_t connected = false;
     if (current_tls_mode) {
