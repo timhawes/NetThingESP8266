@@ -35,11 +35,13 @@ String NetThing::canonifyFilename(String filename) {
 }
 
 void NetThing::psConnectHandler() {
-  StaticJsonDocument<JSON_OBJECT_SIZE(4) + 128> doc;
+  StaticJsonDocument<JSON_OBJECT_SIZE(6) + 128> doc;
   doc[cmd_key] = "hello";
   doc["clientid"] = server_username;
   doc["username"] = server_username;
   doc["password"] = server_password;
+  doc["esp_chip_model"] = "ESP8266";
+  doc["esp_sketch_md5"] = ESP.getSketchMD5();
   sendJson(doc);
   if (connect_callback) {
     connect_callback();
