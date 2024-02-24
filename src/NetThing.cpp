@@ -9,6 +9,7 @@ NetThing::NetThing(int rx_buffer_len, int tx_buffer_len) {
 
   setSyncInterval(3600);
 
+  last_wifi_check = millis();
   wifiEventConnectHandler = WiFi.onStationModeGotIP(std::bind(&NetThing::wifiConnectHandler, this));
   wifiEventDisconnectHandler = WiFi.onStationModeDisconnected(std::bind(&NetThing::wifiDisconnectHandler, this));
 
@@ -91,6 +92,17 @@ void NetThing::loop() {
       doc[cmd_key] = "error";
       doc["error"] = "firmware write timed-out";
       sendJson(doc);
+    }
+  }
+
+  if (wifi_check_interval) {
+    if ((long)(millis() - last_wifi_check) > wifi_check_interval) {
+      last_wifi_check = millis();
+      if (!WiFi.isConnected()) {
+        wifi_check_errors++;
+        Serial.println("NetThing: forcing a wifi reconnect");
+        WiFi.reconnect();
+      }
     }
   }
 
@@ -204,6 +216,11 @@ void NetThing::setWiFi(const char *ssid, const char *password) {
   WiFi.enableAP(false);
   WiFi.enableSTA(true);
   WiFi.begin(ssid, password);
+  last_wifi_check = millis();
+}
+
+void NetThing::setWifiCheckInterval(unsigned long interval) {
+  wifi_check_interval = interval;
 }
 
 void NetThing::start() {
@@ -215,11 +232,13 @@ void NetThing::stop() {
 }
 
 void NetThing::wifiConnectHandler() {
+  last_wifi_check = millis();
   Serial.println("NetThing: wifi connected");
   wifi_reconnections++;
 }
 
 void NetThing::wifiDisconnectHandler() {
+  last_wifi_check = millis();
   Serial.println("NetThing: wifi disconnected");
 }
 
@@ -565,6 +584,7 @@ void NetThing::cmdNetMetricsQuery(const JsonDocument &doc) {
   reply["net_json_parse_ok"] = json_parse_ok;
   reply["net_json_parse_max_usage"] = json_parse_max_usage;
   reply["net_wifi_reconns"] = wifi_reconnections;
+  reply["net_wifi_check_errors"] = wifi_check_errors;
   reply["net_wifi_rssi"] = WiFi.RSSI();
   reply.shrinkToFit();
   sendJson(reply);
