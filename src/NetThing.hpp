@@ -41,12 +41,14 @@ class NetThing {
   const char *filename_prefix = "/";
   unsigned long receive_watchdog_timeout = 0; // restart if no packet received for this ms period
   unsigned long loop_watchdog_timeout = 60000; // restart if loop() not called for this ms period
+  unsigned long wifi_check_interval = 0; // check wifi every X millis and force a reconnect if required
   bool debug_json = false;
   bool allow_firmware_sync = true;
   bool allow_file_sync = true;
   // state
   bool enabled = false;
   unsigned long last_packet_received = 0;
+  unsigned long last_wifi_check = 0;
   bool restarted = true; // the system has been restarted, will be set to false when it has been logged
   bool restart_needed = false; // a graceful restart is needed
   bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
@@ -56,6 +58,7 @@ class NetThing {
   unsigned long json_parse_errors = 0;
   unsigned long json_parse_ok = 0;
   unsigned long wifi_reconnections = 0;
+  unsigned long wifi_check_errors = 0;
   // private methods
   String canonifyFilename(String filename);
   void psConnectHandler();
@@ -108,6 +111,7 @@ class NetThing {
   void setReceiveWatchdog(unsigned long timeout);
   void setLoopWatchdog(unsigned long timeout);
   void setWiFi(const char *ssid, const char *password);
+  void setWifiCheckInterval(unsigned long interval);
   void start();
   void stop();
   void sendEvent(const char* event, const char* message=NULL);
