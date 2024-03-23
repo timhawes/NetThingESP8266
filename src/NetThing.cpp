@@ -82,17 +82,24 @@ void NetThing::psDisconnectHandler() {
 }
 
 void NetThing::loop() {
-  loopwatchdog.feed();
+  last_loop = millis();
+  if (!loop_watchdog_started) {
+      loop_watchdog_ticker.attach(1, +[](NetThing* netthing) { netthing->loopTimeoutHandler(); }, this);
+      loop_watchdog_started = true;
+  }
 
   ps->loop();
 
-  if (restart_needed) {
-    if (restart_callback) {
+  if (restart_firmware) {
+    if (restart_reason_callback) {
+      // main application may restart if convenient
+      restart_reason_callback(false, restart_firmware, NETTHING_RESTART_FIRMWARE);
+    } else if (restart_callback) {
       // main application may restart if convenient
       restart_callback(false, restart_firmware);
     } else {
       // no handler available, perform our own restart immediately
-      ESP.restart();
+      restarter.restartWithReason(NETTHING_RESTART_FIRMWARE);
       delay(5000);
     }
   }
@@ -133,12 +140,15 @@ void NetThing::loop() {
   if (receive_watchdog_timeout > 0) {
     if ((long)(millis() - last_packet_received) > receive_watchdog_timeout) {
       Serial.println("NetThing: receive watchdog triggered, restarting");
-      if (restart_callback) {
+      if (restart_reason_callback) {
+        // main application may restart if convenient
+        restart_reason_callback(false, restart_firmware, NETTHING_RESTART_RECEIVE_WATCHDOG);
+      } else if (restart_callback) {
         // main application may restart if convenient
         restart_callback(false, restart_firmware);
       } else {
         // no handler available, perform our own restart immediately
-        ESP.restart();
+        restarter.restartWithReason(NETTHING_RESTART_RECEIVE_WATCHDOG);
         delay(5000);
       }
     }
@@ -159,6 +169,12 @@ void NetThing::onReceiveJson(NetThingReceivePacketHandler callback) {
 
 void NetThing::onRestartRequest(NetThingRestartRequestHandler callback) {
   restart_callback = callback;
+  restart_reason_callback = NULL;
+}
+
+void NetThing::onRestartRequest(NetThingRestartReasonRequestHandler callback) {
+  restart_callback = NULL;
+  restart_reason_callback = callback;
 }
 
 void NetThing::onTransferStatus(NetThingTransferStatusHandler callback) {
@@ -239,7 +255,7 @@ void NetThing::setReceiveWatchdog(unsigned long timeout) {
 }
 
 void NetThing::setLoopWatchdog(unsigned long timeout) {
-  loopwatchdog.setTimeout(timeout);
+  loop_watchdog_timeout = timeout;
 }
 
 void NetThing::setWiFi(const char *ssid, const char *password) {
@@ -261,7 +277,6 @@ void NetThing::start() {
 
 void NetThing::stop() {
   ps->stop();
-  loopwatchdog.stop();
 }
 
 void NetThing::wifiConnectHandler() {
@@ -521,7 +536,6 @@ void NetThing::cmdFirmwareData(const JsonDocument &obj)
           transfer_status_callback("firmware", 100, false, true);
         }
         restart_firmware = true;
-        restart_needed = true;
       } else {
         // finished but commit failed
         reply[cmd_key] = "firmware_write_error";
@@ -645,19 +659,24 @@ void NetThing::cmdPing(const JsonDocument &doc) {
 
 void NetThing::cmdRestart(const JsonDocument &doc) {
   if (doc["force"]) {
-    if (restart_callback) {
+    if (restart_reason_callback) {
+      restart_reason_callback(true, restart_firmware, NETTHING_RESTART_REMOTE_IMMEDIATE);
+    } else if (restart_callback) {
       restart_callback(true, restart_firmware);
     }
     // if the main application didn't restart, we will...
-    ESP.restart();
+    restarter.restartWithReason(NETTHING_RESTART_REMOTE_IMMEDIATE);
     delay(5000);
   } else {
-    if (restart_callback) {
+    if (restart_reason_callback) {
+      // main application may restart if convenient
+      restart_reason_callback(false, restart_firmware, NETTHING_RESTART_REMOTE);
+    } else if (restart_callback) {
       // main application may restart if convenient
       restart_callback(false, restart_firmware);
     } else {
       // no handler available, perform our own restart immediately
-      ESP.restart();
+      restarter.restartWithReason(NETTHING_RESTART_REMOTE);
       delay(5000);
     }
   }
@@ -694,9 +713,7 @@ void NetThing::cmdSystemQuery(const JsonDocument &doc) {
     reply["time"] = now();
     reply["uptime"] = now() - boot_time;
   }
-  if (loopwatchdog.restarted()) {
-    reply["net_reset_info"] = "loop() watchdog timeout";
-  }
+  reply["restart_reason"] = restarter.getReason();
   if (restarted) {
     reply["restarted"] = true;
     restarted = false;
@@ -773,4 +790,21 @@ void NetThing::sendEvent(const char* event, size_t size, const char* format, ...
   vsnprintf(message, size, format, args);
   va_end(args);
   sendEvent(event, message);
+}
+
+void NetThing::loopTimeoutHandler() {
+  if (loop_watchdog_timeout > 0) {
+    if ((long)(millis() - last_loop) > loop_watchdog_timeout) {
+      Serial.println("NetThing: restarting for loop() watchdog");
+      restarter.restartWithReason(NETTHING_RESTART_LOOP_WATCHDOG);
+    }
+  }
+}
+
+uint16_t NetThing::getRestartReason() {
+  return restarter.getReason();
+}
+
+void NetThing::restartWithReason(uint16_t reason) {
+  restarter.restartWithReason(reason);
 }

@@ -9,8 +9,17 @@
 #include "FS.h"
 #include "SPIFFS.h"
 #include "PacketStream.hpp"
+#include "Restarter.hpp"
+#include "Ticker.h"
 #include "TimeLib.h"
-#include "LoopWatchdog.hpp"
+
+#define NETTHING_RESTART_ENDUSER 0x0100
+#define NETTHING_RESTART_REMOTE 0x0101
+#define NETTHING_RESTART_REMOTE_IMMEDIATE 0x0102
+#define NETTHING_RESTART_FIRMWARE 0x0103
+#define NETTHING_RESTART_CONFIG_CHANGE 0x0104
+#define NETTHING_RESTART_RECEIVE_WATCHDOG 0x0105
+#define NETTHING_RESTART_LOOP_WATCHDOG 0x0106
 
 #define df2xstr(s) #s
 #define df2str(s) df2xstr(s)
@@ -19,6 +28,7 @@
 typedef std::function<void()> NetThingConnectHandler;
 typedef std::function<void()> NetThingDisconnectHandler;
 typedef std::function<void(bool immediate, bool firmware)> NetThingRestartRequestHandler;
+typedef std::function<void(bool immediate, bool firmware, uint16_t reason)> NetThingRestartReasonRequestHandler;
 typedef std::function<void(const JsonDocument &doc)> NetThingReceivePacketHandler;
 typedef std::function<void(const char *filename, int progress, bool active, bool changed)> NetThingTransferStatusHandler;
 
@@ -27,12 +37,14 @@ class NetThing {
   NetThingConnectHandler connect_callback;
   NetThingDisconnectHandler disconnect_callback;
   NetThingRestartRequestHandler restart_callback;
+  NetThingRestartReasonRequestHandler restart_reason_callback;
   NetThingReceivePacketHandler receivejson_callback;
   NetThingTransferStatusHandler transfer_status_callback;
   PacketStream *ps;
   FirmwareWriter *firmware_writer;
   FileWriter *file_writer;
-  LoopWatchdog loopwatchdog;
+  Ticker loop_watchdog_ticker;
+  Restarter restarter;
   // configuration
   char mac_address[13] = "";
   const char *cmd_key = "cmd";
@@ -49,9 +61,10 @@ class NetThing {
   bool enabled = false;
   unsigned long last_packet_received = 0;
   unsigned long last_wifi_check = 0;
+  unsigned long last_loop = 0;
+  bool loop_watchdog_started = false; // set to true on the first call to loop()
   bool restarted = true; // the system has been restarted, will be set to false when it has been logged
-  bool restart_needed = false; // a graceful restart is needed
-  bool restart_firmware = false; // the restart is for firmware upgrades and should show an appropriate message
+  bool restart_firmware = false; // a graceful restart is needed for firmware upgrades and should show an appropriate message
   time_t boot_time = 0;
   // metrics
   unsigned int json_parse_max_usage = 0;
@@ -65,6 +78,7 @@ class NetThing {
   void psDisconnectHandler();
   void psReceiveHandler(uint8_t* packet, size_t packet_len);
   void jsonReceiveHandler(const JsonDocument &doc);
+  void loopTimeoutHandler();
   void wifiConnectHandler();
   void wifiDisconnectHandler();
   // network commands
@@ -89,11 +103,15 @@ class NetThing {
   void onConnect(NetThingConnectHandler callback);
   void onDisconnect(NetThingDisconnectHandler callback);
   void onReceiveJson(NetThingReceivePacketHandler callback);
+  [[deprecated]]
   void onRestartRequest(NetThingRestartRequestHandler callback);
+  void onRestartRequest(NetThingRestartReasonRequestHandler callback);
   void onTransferStatus(NetThingTransferStatusHandler callback);
   void reconnect();
   void allowFileSync(bool allow);
   void allowFirmwareSync(bool allow);
+  uint16_t getRestartReason();
+  void restartWithReason(uint16_t reason);
   bool sendJson(const JsonDocument &doc, bool now=false);
   void setCred(const char *username, const char *password);
   void setCred(const char *password);
