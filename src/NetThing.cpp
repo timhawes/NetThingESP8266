@@ -272,11 +272,14 @@ void NetThing::setWifiCheckInterval(unsigned long interval) {
 }
 
 void NetThing::start() {
+  last_loop = millis(); // reset loop watchdog to avoid race-conditions
+  enabled = true;
   ps->start();
 }
 
 void NetThing::stop() {
   ps->stop();
+  enabled = false;
 }
 
 void NetThing::wifiConnectHandler() {
@@ -793,10 +796,12 @@ void NetThing::sendEvent(const char* event, size_t size, const char* format, ...
 }
 
 void NetThing::loopTimeoutHandler() {
-  if (loop_watchdog_timeout > 0) {
-    if ((long)(millis() - last_loop) > loop_watchdog_timeout) {
-      Serial.println("NetThing: restarting for loop() watchdog");
-      restarter.restartWithReason(NETTHING_RESTART_LOOP_WATCHDOG);
+  if (enabled && loop_watchdog_started) {
+    if (loop_watchdog_timeout > 0) {
+      if ((long)(millis() - last_loop) > loop_watchdog_timeout) {
+        Serial.println("NetThing: restarting for loop() watchdog");
+        restarter.restartWithReason(NETTHING_RESTART_LOOP_WATCHDOG);
+      }
     }
   }
 }
