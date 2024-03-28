@@ -12,31 +12,39 @@ FirmwareWriter::~FirmwareWriter() {
 }
 
 void FirmwareWriter::abort() {
-  if (started) {
+  if (update_active) {
+    Serial.println("FirmwareWriter: abort");
     // write some dummy data to break the MD5 check
     Update.write((uint8_t *)"_ABORT_", 7);
     // end the update
     Update.end();
-    strncpy(_md5, "", sizeof(_md5));
-    _size = 0;
-    started = false;
+    update_active = false;
   }
+  strncpy(_md5, "", sizeof(_md5));
+  _size = 0;
+  begin_active = false;
 }
 
 bool FirmwareWriter::add(uint8_t *data, unsigned int len) {
-  return add(data, len, position);
+  return add(data, len, _position);
 }
 
 bool FirmwareWriter::add(uint8_t *data, unsigned int len, unsigned int pos) {
-  last_activity = millis();
-  if (pos != position) {
-    Serial.print("FirmwareWriter: firmware position mismatch (expected=");
-    Serial.print(position, DEC);
-    Serial.print(" received=");
-    Serial.println(pos, DEC);
+  if (!begin_active) {
+    Serial.println("FirmwareWriter: add() called without begin()");
     return false;
   }
-  if (position == 0 && (!started)) {
+
+  if (pos != _position) {
+    Serial.print("FirmwareWriter: firmware position mismatch (expected=");
+    Serial.print(_position, DEC);
+    Serial.print(" received=");
+    Serial.print(pos, DEC);
+    Serial.println(")");
+    return false;
+  }
+
+  if (_position == 0 && (!update_active)) {
     if (len < 4) {
       // need at least 4 bytes to check the file header
       Serial.println("FirmwareWriter: need at least 4 bytes to check the file header");
@@ -64,17 +72,17 @@ bool FirmwareWriter::add(uint8_t *data, unsigned int len, unsigned int pos) {
       Update.printError(Serial);
       return false;
     }
-    started = true;
+    update_active = true;
   }
-  if (!started) {
+  if (!update_active) {
     return false;
   }
   // Serial.print("FirmwareWriter: writing ");
   // Serial.print(len, DEC);
   // Serial.print(" bytes at position ");
-  // Serial.println(position, DEC);
+  // Serial.println(_position, DEC);
   if (Update.write(data, len) == len) {
-    position += len;
+    _position += len;
     return true;
   } else {
     Update.printError(Serial);
@@ -83,20 +91,42 @@ bool FirmwareWriter::add(uint8_t *data, unsigned int len, unsigned int pos) {
 }
 
 bool FirmwareWriter::begin(const char *md5, size_t size) {
-  if (started) {
-    return false;
-  } else {
-    _size = size;
-    strncpy(_md5, md5, sizeof(_md5));
-    position = 0;
-    started = false;
-    last_activity = millis();
+  if (begin_active || update_active) {
+    if (_size != size || strcmp(_md5, md5) != 0) {
+      Serial.println("FirmwareWriter: aborting firmware update to start a different one");
+      abort();
+    }
+  }
+
+  if (begin_active) {
+    Serial.print("FirmwareWriter: continuing firmware update at position ");
+    Serial.println(_position, DEC);
     return true;
   }
+
+  _size = size;
+  strncpy(_md5, md5, sizeof(_md5));
+
+  String current_md5 = ESP.getSketchMD5();
+  if (strncmp(current_md5.c_str(), _md5, 32) == 0) {
+    // this firmware is already installed
+    Serial.println("FirmwareWriter: existing firmware has same md5");
+    return false;
+  }
+  if (_size > (unsigned int)ESP.getFreeSketchSpace()) {
+    // not enough space for new firmware
+    Serial.println("FirmwareWriter: not enough free sketch space");
+    return false;
+  }
+
+  Serial.println("FirmwareWriter: starting new update at position 0");
+  _position = 0;
+  begin_active = true;
+  return true;
 }
 
 bool FirmwareWriter::commit() {
-  if (started) {
+  if (update_active) {
     Serial.println("FirmwareWriter: finishing up");
     if (Update.end()) {
       Serial.println("FirmwareWriter: end() succeeded");
@@ -117,45 +147,26 @@ int FirmwareWriter::getUpdaterError() {
   return Update.getError();
 }
 
-bool FirmwareWriter::open() {
-  String current_md5 = ESP.getSketchMD5();
-  if (strncmp(current_md5.c_str(), _md5, 32) == 0) {
-    // this firmware is already installed
-    Serial.println("FirmwareWriter: existing firmware has same md5");
-    return false;
+unsigned int FirmwareWriter::position() {
+  if (begin_active) {
+    return _position;
+  } else {
+    Serial.println("FirmwareWriter: position() called without begin()");
+    return 0;
   }
-  if (_size > (unsigned int)ESP.getFreeSketchSpace()) {
-    // not enough space for new firmware
-    Serial.println("FirmwareWriter: not enough free sketch space");
-    return false;
-  }
-  position = 0;
-  return true;
 }
 
 int FirmwareWriter::progress() {
   if (_size > 0) {
-    return (100 * position) / _size;
+    return (100 * _position) / _size;
   } else {
     return 0;
   }
 }
 
-bool FirmwareWriter::running() {
-  return started;
-}
-
-int FirmwareWriter::idleMillis() {
-  if (started) {
-    return millis() - last_activity;
-  } else {
-    return -1;
-  }
-}
-
-bool FirmwareWriter::upToDate() {
+bool FirmwareWriter::upToDate(const char *md5) {
   String current_md5 = ESP.getSketchMD5();
-  if (strncmp(current_md5.c_str(), _md5, 32) == 0) {
+  if (strncmp(current_md5.c_str(), md5, 32) == 0) {
     return true;
   } else {
     return false;
