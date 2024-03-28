@@ -7,9 +7,9 @@ class FirmwareWriter {
  private:
   char _md5[33];
   size_t _size = 0;
-  unsigned int position = 0;
-  bool started = false;
-  unsigned long last_activity = 0;
+  unsigned int _position = 0;
+  bool begin_active = false;
+  bool update_active = false;
 
  public:
   FirmwareWriter();
@@ -20,11 +20,9 @@ class FirmwareWriter {
   bool begin(const char *md5, size_t size);
   bool commit();
   int getUpdaterError();
-  bool open();
+  unsigned int position();
   int progress();
-  bool running();
-  bool upToDate();
-  int idleMillis();
+  bool upToDate(const char *md5);
 };
 
 #endif

@@ -75,7 +75,6 @@ void NetThing::psConnectHandler() {
 
 void NetThing::psDisconnectHandler() {
   file_writer->abort();
-  firmware_writer->abort();
   if (disconnect_callback) {
     disconnect_callback();
   }
@@ -111,17 +110,6 @@ void NetThing::loop() {
       StaticJsonDocument<JSON_OBJECT_SIZE(2)> doc;
       doc[cmd_key] = "error";
       doc["error"] = "file write timed-out";
-      sendJson(doc);
-    }
-  }
-
-  if (firmware_writer) {
-    if (firmware_writer->idleMillis() > 30000) {
-      Serial.println("NetThing: timing-out firmware writer");
-      firmware_writer->abort();
-      StaticJsonDocument<JSON_OBJECT_SIZE(2)> doc;
-      doc[cmd_key] = "error";
-      doc["error"] = "firmware write timed-out";
       sendJson(doc);
     }
   }
@@ -553,7 +541,7 @@ void NetThing::cmdFirmwareData(const JsonDocument &obj)
     } else {
       // more data required
       reply[cmd_key] = "firmware_continue";
-      reply["position"] = obj["position"].as<int>() + binary_length;
+      reply["position"] = firmware_writer->position();
       sendJson(reply, true);
       if (transfer_status_callback) {
         transfer_status_callback("firmware", firmware_writer->progress(), true, false);
@@ -576,27 +564,19 @@ void NetThing::cmdFirmwareWrite(const JsonDocument &obj)
 {
   StaticJsonDocument<JSON_OBJECT_SIZE(4) + 64> reply;
 
+  if (firmware_writer->upToDate(obj["md5"])) {
+    reply[cmd_key] = "firmware_write_error";
+    reply["md5"] = obj["md5"];
+    reply["error"] = "already up to date";
+    reply["updater_error"] = firmware_writer->getUpdaterError();
+    sendJson(reply);
+  }
+
   if (firmware_writer->begin(obj["md5"], obj["size"])) {
-    if (firmware_writer->upToDate()) {
-      reply[cmd_key] = "firmware_write_error";
-      reply["md5"] = obj["md5"];
-      reply["error"] = "already up to date";
-      reply["updater_error"] = firmware_writer->getUpdaterError();
-      sendJson(reply);
-    } else {
-      if (firmware_writer->open()) {
-        reply[cmd_key] = "firmware_continue";
-        reply["md5"] = obj["md5"];
-        reply["position"] = 0;
-        sendJson(reply);
-      } else {
-        reply[cmd_key] = "firmware_write_error";
-        reply["md5"] = obj["md5"];
-        reply["error"] = "firmware_writer->open() failed";
-        reply["updater_error"] = firmware_writer->getUpdaterError();
-        sendJson(reply);
-      }
-    }
+    reply[cmd_key] = "firmware_continue";
+    reply["md5"] = obj["md5"];
+    reply["position"] = firmware_writer->position();
+    sendJson(reply);
   } else {
     reply[cmd_key] = "firmware_write_error";
     reply["md5"] = obj["md5"];
