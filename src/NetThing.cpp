@@ -289,20 +289,25 @@ void NetThing::sendFileInfo(const char *filename)
   obj["filename"] = filename;
   obj["local_filename"] = path;
 
-  File f = SPIFFS.open(path, "r");
-  if (f) {
-    MD5Builder md5;
-    md5.begin();
-    while (f.available()) {
-      uint8_t buf[256];
-      size_t buflen;
-      buflen = f.readBytes((char*)buf, 256);
-      md5.add(buf, buflen);
+  if (SPIFFS.exists(path)) {
+    File f = SPIFFS.open(path, "r");
+    if (f) {
+      MD5Builder md5;
+      md5.begin();
+      while (f.available()) {
+        uint8_t buf[256];
+        size_t buflen;
+        buflen = f.readBytes((char*)buf, 256);
+        md5.add(buf, buflen);
+      }
+      md5.calculate();
+      obj["size"] = f.size();
+      obj["md5"] = md5.toString();
+      f.close();
+    } else {
+      obj["size"] = (char*)NULL;
+      obj["md5"] = (char*)NULL;
     }
-    md5.calculate();
-    obj["size"] = f.size();
-    obj["md5"] = md5.toString();
-    f.close();
   } else {
     obj["size"] = (char*)NULL;
     obj["md5"] = (char*)NULL;
